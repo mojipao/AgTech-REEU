@@ -580,8 +580,8 @@ All results are fully reproducible using the provided codebase. The corrected pl
 
 ---
 
-**Authors**: AgTech Research Team  
-**Institution**: Texas Agricultural Research Program  
+**Authors**: Mohriz Murad  
+**Institution**: UW and TAMU AgriLife
 **Contact**: [Contact information]  
 **Code Availability**: Complete source code available in organized repository structure  
 **Data Availability**: Historical datasets and synthetic outputs provided for research reproducibility 
