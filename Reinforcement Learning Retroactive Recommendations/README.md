@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This paper presents a novel reinforcement learning framework for transferring irrigation policies from expert demonstrations in Lubbock, Texas to optimized plant health management in Corpus Christi, Texas. The system addresses critical limitations in traditional expert imitation approaches by prioritizing agricultural outcomes over behavioral mimicry. Using Proximal Policy Optimization (PPO) with a multi-component reward function, our approach achieves sophisticated irrigation strategies that improve plant health (+0.014 ΔExG for both H_I and F_I treatments) while maintaining water efficiency. The framework successfully differentiates between treatment protocols (H_I "Steady Maintainer" vs F_I "Emergency Responder" strategies), handles real-world data irregularities (68 NaN ExG values, various missing sensor data), and demonstrates 100% positive irrigation outcomes across 366-day growing seasons. Key innovations include: (1) plant health-focused reward architecture with water stress calibration, (2) treatment-specific action spaces reflecting irrigation protocol constraints (now expanded for more diversity), (3) robust NaN handling for field sensor data, (4) agricultural domain knowledge integration through seasonal growth stage modeling, and (5) increased entropy regularization in PPO to promote adaptive, non-repetitive policies. Performance validation shows intelligent emergency response (F_I deploys 150 gallons during 31 high-stress days), consistent preventive care (H_I maintains 45-gallon baseline), and strong correlation between irrigation decisions and plant health outcomes (0.875 correlation for F_I). The system demonstrates that reinforcement learning can surpass expert imitation by optimizing for true agricultural objectives rather than replicating human behavior patterns.
+This paper presents a novel reinforcement learning framework for transferring irrigation policies from expert demonstrations in Lubbock, Texas to optimized plant health management in Corpus Christi, Texas. The system addresses critical limitations in traditional expert imitation approaches by prioritizing agricultural outcomes over behavioral mimicry. Using Proximal Policy Optimization (PPO) with a multi-component reward function, our approach achieves sophisticated irrigation strategies that improve plant health (+0.014 ΔExG for both H_I and F_I treatments) while maintaining water efficiency. The framework successfully differentiates between treatment protocols (H_I "Steady Maintainer" vs F_I "Emergency Responder" strategies), handles real-world data irregularities (68 NaN ExG values, various missing sensor data), and demonstrates 100% positive irrigation outcomes across 366-day growing seasons. Key innovations include: (1) plant health-focused reward architecture with water stress calibration, (2) treatment-specific action spaces reflecting irrigation protocol constraints (now expanded for more diversity), (3) robust NaN handling for field sensor data, (4) agricultural domain knowledge integration through seasonal growth stage modeling, (5) increased entropy regularization in PPO to promote adaptive, non-repetitive policies, and (6) a new adaptive reward function that directly incentivizes matching irrigation to plant need and maximizing plant health (Delta ExG). Performance validation shows intelligent emergency response (F_I deploys 150 gallons during 31 high-stress days), consistent preventive care (H_I maintains 45-gallon baseline), and strong correlation between irrigation decisions and plant health outcomes (0.875 correlation for F_I). The system demonstrates that reinforcement learning can surpass expert imitation by optimizing for true agricultural objectives rather than replicating human behavior patterns.
 
 **Keywords:** Reinforcement learning, Agricultural automation, Irrigation optimization, Policy transfer, Plant health, Cotton production, Proximal Policy Optimization (PPO)
 
@@ -111,127 +111,70 @@ A_RF = {0} gallons
 - Episode length reached OR
 - End of available data
 
-### 2.2 Multi-Component Reward Function
+### 2.2 Adaptive, Plant Health-Focused Reward Function
 
-The reward function optimizes three agricultural objectives with specific point allocations:
+The reward function is designed to directly incentivize adaptive, state-sensitive irrigation that maximizes plant health (as measured by Delta ExG) and matches agronomic need. It replaces the previous rule-based, point-allocation system with a formula-based, physiologically grounded approach:
 
-#### 2.2.1 Water Stress Response Component (30 points maximum)
+#### 2.2.1 Target Irrigation Calculation
 
-**Water Stress Classification**:
+For each step, compute:
 ```
-stress_level = {
-    'high':   SM_t < 190 (water_deficit > 20)
-    'medium': 190 ≤ SM_t < 200 (10 < water_deficit ≤ 20)  
-    'low':    SM_t ≥ 200 (water_deficit ≤ 10)
-}
-```
-
-**Stress Response Rewards**:
-
-*High Stress (SM_t < 190)*:
-```
-R_stress(a_t) = {
-    +30.0  if a_t ≥ 50 gallons (adequate response)
-    +20.0  if 25 ≤ a_t < 50 gallons (partial response)
-    +10.0  if 0 < a_t < 25 gallons (minimal response)
-    -25.0  if a_t = 0 gallons (no response to crisis)
-}
-```
-
-*Medium Stress (190 ≤ SM_t < 200)*:
-```
-R_stress(a_t) = {
-    +25.0  if a_t ≥ 25 gallons (adequate response)
-    +15.0  if a_t > 0 gallons (some response)
-    -15.0  if a_t = 0 gallons (inadequate response)
-}
-```
-
-*Low Stress (SM_t ≥ 200)*:
-```
-R_stress(a_t) = {
-    +20.0  if a_t = 0 gallons (water conservation)
-    +5.0   if 0 < a_t ≤ 25 gallons (minor waste)
-    -15.0  if a_t > 25 gallons (major waste)
-}
-```
-
-#### 2.2.2 Treatment Differentiation Component (25 points maximum)
-
-**Full Irrigation (F_I) Rewards**:
-```
-R_treatment_FI(a_t) = {
-    +25.0  if a_t ≥ 100 gallons (aggressive as expected)
-    +22.0  if 75 ≤ a_t < 100 gallons (very good)
-    +20.0  if 50 ≤ a_t < 75 gallons (good, boosted vs H_I)
-    +16.0  if 25 ≤ a_t < 50 gallons (acceptable, boosted vs H_I)
-    +10.0  if 0 < a_t < 25 gallons (poor but better than H_I)
-    -20.0  if a_t = 0 gallons (inappropriate for F_I)
-}
-```
-
-**Half Irrigation (H_I) Rewards**:
-```
-R_treatment_HI(a_t) = {
-    +18.0  if 45 ≤ a_t ≤ 75 gallons (optimal H_I range)
-    +16.0  if 30 ≤ a_t < 45 gallons (conservative, appropriate)
-    +12.0  if 15 ≤ a_t < 30 gallons (minimal but acceptable)
-    +8.0   if 0 < a_t < 15 gallons (minimal effort)
-    -15.0  if a_t > 75 gallons (excessive for H_I)
-    -15.0  if a_t = 0 gallons (inappropriate for H_I)
-}
-```
-
-**Rainfed (R_F) Constraints**:
-```
-R_treatment_RF(a_t) = {
-    +25.0  if a_t = 0 gallons (protocol compliance)
-    -40.0  if a_t > 0 gallons (protocol violation)
-}
-```
-
-#### 2.2.3 Plant Health Promotion Component (15 points maximum)
-
-**ExG-Based Health Rewards**:
-```
-R_health(ExG_t) = {
-    +15.0  if ExG_t > 0.6 (excellent health)
-    +12.0  if 0.5 < ExG_t ≤ 0.6 (good health)
-    +8.0   if 0.4 < ExG_t ≤ 0.5 (moderate health)
-    +4.0   if 0.3 < ExG_t ≤ 0.4 (poor health)
-    +0.0   if ExG_t ≤ 0.3 (critical health)
-}
-```
-
-**Health Recovery Bonuses**:
-```
-if ExG_t ≤ 0.4 and a_t > 0 and stress_level ∈ {'high', 'medium'}:
-    R_health += 3.0  (helping struggling plant)
-
-if ExG_t ≤ 0.3 and a_t > 0 and stress_level ∈ {'high', 'medium'}:
-    R_health += 6.0  (helping critical plant)
-    
-if ExG_t ≤ 0.3 and a_t = 0:
-    R_health -= 8.0  (failing to help critical plant)
-```
-
-#### 2.2.4 Seasonal Adjustment Component
-
-**Late Season Irrigation Penalty**:
-```
-if DAP_t > 100 and a_t > 50:
-    R_seasonal = -5.0  (excessive late-season irrigation)
+water_deficit = max(0, 210 - soil_moisture)
+if water_deficit > 20:
+    target_irrigation = max(50, et0 * kc + 0.5 * water_deficit)
+elif water_deficit > 10:
+    target_irrigation = max(25, et0 * kc + 0.3 * water_deficit)
 else:
-    R_seasonal = 0.0
+    target_irrigation = 0
 ```
 
-#### 2.2.5 Total Reward Calculation
+#### 2.2.2 Reward Formula
 
-```
-R_total(s_t, a_t) = R_stress(a_t) + R_treatment(a_t) + R_health(ExG_t) + R_seasonal(DAP_t, a_t)
+Let `a_t` be the irrigation action (gallons), and `target_irrigation` as above. Let `delta_exg` be the predicted plant health improvement (see below).
 
-Subject to: -100.0 ≤ R_total ≤ 100.0 (clamping)
+The reward is:
 ```
+reward = -0.2 * abs(a_t - target_irrigation)   # Penalty for missing target
+if abs(a_t - target_irrigation) < 10 and water_deficit > 10:
+    reward += 20                                # Bonus for matching target in stress
+reward += 100 * delta_exg                       # Strong bonus for plant health improvement
+if water_deficit < 10 and a_t > 0:
+    reward -= 5                                 # Penalty for unnecessary irrigation in low stress
+reward -= 0.05 * a_t                            # Cost for every gallon irrigated
+reward += Uniform(-0.5, 0.5)                    # Small random noise
+reward = clamp(reward, -100, 100)               # Clamp to [-100, 100]
+```
+
+#### 2.2.3 Delta ExG Calculation
+
+Delta ExG is predicted as a function of state and action:
+```
+if days_after_planting > 100:
+    base_trend = -0.002
+elif days_after_planting > 80:
+    base_trend = -0.001
+else:
+    base_trend = 0.001
+
+if a_t > 0:
+    if soil_moisture < 190:
+        irrigation_benefit = 0.015 + (a_t / 1200)
+    elif soil_moisture < 200:
+        irrigation_benefit = 0.007 + (a_t / 2000)
+    else:
+        irrigation_benefit = max(-0.002, a_t / 5000)
+else:
+    irrigation_benefit = 0
+
+delta_exg = clamp(base_trend + irrigation_benefit, -0.01, 0.05)
+```
+
+#### 2.2.4 Adaptivity and Plant Health Focus
+
+- The agent is rewarded for matching irrigation to the physiological need of the plant, not for fixed or repetitive actions.
+- Large bonuses for positive Delta ExG ensure the policy prioritizes plant health improvement.
+- Penalties for waste and unnecessary irrigation promote water efficiency.
+- The reward is continuous and state-sensitive, enabling nuanced, adaptive policies.
 
 ### 2.3 Proximal Policy Optimization (PPO) Configuration
 
