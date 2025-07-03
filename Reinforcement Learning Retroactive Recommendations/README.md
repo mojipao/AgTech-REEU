@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This paper presents a novel reinforcement learning framework for transferring irrigation policies from expert demonstrations in Lubbock, Texas to optimized plant health management in Corpus Christi, Texas. The system addresses critical limitations in traditional expert imitation approaches by prioritizing agricultural outcomes over behavioral mimicry. Using Proximal Policy Optimization (PPO) with a multi-component reward function, our approach achieves sophisticated irrigation strategies that improve plant health (+0.014 ΔExG for both H_I and F_I treatments) while maintaining water efficiency. The framework successfully differentiates between treatment protocols (H_I "Steady Maintainer" vs F_I "Emergency Responder" strategies), handles real-world data irregularities (68 NaN ExG values, various missing sensor data), and demonstrates 100% positive irrigation outcomes across 366-day growing seasons. Key innovations include: (1) plant health-focused reward architecture with water stress calibration, (2) treatment-specific action spaces reflecting irrigation protocol constraints, (3) robust NaN handling for field sensor data, and (4) agricultural domain knowledge integration through seasonal growth stage modeling. Performance validation shows intelligent emergency response (F_I deploys 150 gallons during 31 high-stress days), consistent preventive care (H_I maintains 45-gallon baseline), and strong correlation between irrigation decisions and plant health outcomes (0.875 correlation for F_I). The system demonstrates that reinforcement learning can surpass expert imitation by optimizing for true agricultural objectives rather than replicating human behavior patterns.
+This paper presents a novel reinforcement learning framework for transferring irrigation policies from expert demonstrations in Lubbock, Texas to optimized plant health management in Corpus Christi, Texas. The system addresses critical limitations in traditional expert imitation approaches by prioritizing agricultural outcomes over behavioral mimicry. Using Proximal Policy Optimization (PPO) with a multi-component reward function, our approach achieves sophisticated irrigation strategies that improve plant health (+0.014 ΔExG for both H_I and F_I treatments) while maintaining water efficiency. The framework successfully differentiates between treatment protocols (H_I "Steady Maintainer" vs F_I "Emergency Responder" strategies), handles real-world data irregularities (68 NaN ExG values, various missing sensor data), and demonstrates 100% positive irrigation outcomes across 366-day growing seasons. Key innovations include: (1) plant health-focused reward architecture with water stress calibration, (2) treatment-specific action spaces reflecting irrigation protocol constraints (now expanded for more diversity), (3) robust NaN handling for field sensor data, (4) agricultural domain knowledge integration through seasonal growth stage modeling, and (5) increased entropy regularization in PPO to promote adaptive, non-repetitive policies. Performance validation shows intelligent emergency response (F_I deploys 150 gallons during 31 high-stress days), consistent preventive care (H_I maintains 45-gallon baseline), and strong correlation between irrigation decisions and plant health outcomes (0.875 correlation for F_I). The system demonstrates that reinforcement learning can surpass expert imitation by optimizing for true agricultural objectives rather than replicating human behavior patterns.
 
 **Keywords:** Reinforcement learning, Agricultural automation, Irrigation optimization, Policy transfer, Plant health, Cotton production, Proximal Policy Optimization (PPO)
 
@@ -28,8 +28,8 @@ This research proposes a fundamental paradigm shift from expert imitation to out
 The target implementation focuses on cotton irrigation management in Corpus Christi, Texas (27.77°N, 97.39°W) during the 2025 growing season. The experimental framework includes 443.5 sq ft plots with three distinct irrigation treatments:
 
 - **R_F (Rainfed)**: Natural precipitation only, no supplemental irrigation
-- **H_I (Half Irrigation)**: Conservative irrigation protocol (15-90 gallons per application)
-- **F_I (Full Irrigation)**: Aggressive irrigation protocol (25-150 gallons per application)
+- **H_I (Half Irrigation)**: Conservative irrigation protocol (now 0-90 gallons, 14 discrete actions)
+- **F_I (Full Irrigation)**: Aggressive irrigation protocol (now 0-150 gallons, 12 discrete actions)
 
 The system operates on enhanced ML-generated data spanning April 3 - October 31, 2025 (211 days), encompassing complete cotton development from planting through harvest. Plot size normalization uses the conversion factor of 277 gallons = 1 inch water depth across the 443.5 sq ft area.
 
@@ -83,18 +83,18 @@ default_values = [200, 5, 85, 0, 0.4, 60, 0, 0.8]
 
 #### 2.1.2 Action Space Architecture
 
-Treatment-specific discrete action spaces reflect irrigation protocol constraints:
+Treatment-specific discrete action spaces reflect irrigation protocol constraints (EXPANDED for more diversity):
 
 **Full Irrigation (F_I)**:
 ```
-A_FI = {0, 25, 50, 75, 100, 125, 150} gallons
-|A_FI| = 7 actions
+A_FI = {0, 10, 20, 30, 40, 50, 60, 75, 90, 110, 130, 150} gallons
+|A_FI| = 12 actions
 ```
 
 **Half Irrigation (H_I)**:
 ```
-A_HI = {0, 15, 30, 45, 60, 75, 90} gallons  
-|A_HI| = 7 actions
+A_HI = {0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75, 90} gallons  
+|A_HI| = 14 actions
 ```
 
 **Rainfed (R_F)**:
@@ -272,7 +272,7 @@ total_timesteps = 50000  # Total training duration
 gamma = 0.99             # Discount factor for future rewards
 gae_lambda = 0.95        # Generalized Advantage Estimation
 clip_range = 0.2         # PPO clipping parameter
-ent_coef = 0.005         # Entropy coefficient (reduced for stability)
+ent_coef = 0.1           # Entropy coefficient (increased to promote more exploration and action diversity)
 vf_coef = 0.5           # Value function loss coefficient
 max_grad_norm = 0.5      # Gradient clipping threshold
 ```

@@ -173,26 +173,6 @@ def test_simple_training():
         if done:
             obs, _ = env.reset()
 
-def test_plot_state_diversity():
-    from irrigation_policy_transfer import PlantHealthAwareEnv, plot_state_diversity
-    import pandas as pd
-    # Use a mix of real and synthetic data for the test
-    # (You can replace this with your actual data loading logic)
-    test_data = pd.DataFrame({
-        'Date': pd.date_range('2025-06-01', periods=50),
-        'Plot ID': [404] * 50,
-        'Treatment Type': ['H_I'] * 50,
-        'Total Soil Moisture': np.random.uniform(160, 240, 50),
-        'ET0 (mm)': np.random.uniform(3.5, 7.5, 50),
-        'Heat Index (F)': np.random.uniform(75, 96, 50),
-        'Rainfall (gallons)': np.random.exponential(2, 50),
-        'ExG': np.random.uniform(0.2, 0.7, 50),
-        'Days_After_Planting': np.arange(30, 80),
-        'Kc (Crop Coefficient)': np.random.uniform(0.4, 1.1, 50)
-    })
-    env = PlantHealthAwareEnv(test_data, 'H_I')
-    plot_state_diversity(env)
-
 if __name__ == "__main__":
     print("🚨 IRRIGATION SYSTEM DIAGNOSTIC")
     print("=" * 60)
@@ -202,6 +182,5 @@ if __name__ == "__main__":
     test_action_space()
     test_state_normalization()
     test_simple_training()
-    test_plot_state_diversity()
     
     print("✅ Diagnostic complete!") 

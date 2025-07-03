@@ -22,8 +22,6 @@ import torch
 import random
 import warnings
 warnings.filterwarnings('ignore')
-import matplotlib.pyplot as plt
-import os
 
 # Set fixed random seeds for reproducibility
 random.seed(42)
@@ -39,11 +37,12 @@ class PlantHealthAwareEnv(gym.Env):
         self.treatment_type = treatment_type
         self.corpus_data = corpus_data.copy()
         
-        # EXPANDED: More granular irrigation action space for diversity
+        # FIXED: Increased irrigation amounts to actually reduce water stress
+        # Based on analysis showing current amounts insufficient
         if treatment_type == 'F_I':  # Full irrigation - aggressive watering
-            self.irrigation_amounts = [0, 10, 20, 30, 40, 50, 60, 75, 90, 110, 130, 150]  # gallons
+            self.irrigation_amounts = [0, 25, 50, 75, 100, 125, 150]  # gallons
         elif treatment_type == 'H_I':  # Half irrigation - moderate watering  
-            self.irrigation_amounts = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75, 90]   # gallons
+            self.irrigation_amounts = [0, 15, 30, 45, 60, 75, 90]   # gallons
         else:  # R_F - Rainfed
             self.irrigation_amounts = [0]  # No irrigation allowed
             
@@ -101,10 +100,8 @@ class PlantHealthAwareEnv(gym.Env):
             if not any(pd.isna(val) or np.isnan(val) for val in feature_row):
                 features.append(feature_row)
         
-        if len(features) > 10:
+        if len(features) > 10:  # Need enough data points
             self.scaler.fit(features)
-            print("Scaler min:", self.scaler.data_min_)
-            print("Scaler max:", self.scaler.data_max_)
         else:
             # Fallback with multiple diverse samples
             dummy_features = [
@@ -115,8 +112,6 @@ class PlantHealthAwareEnv(gym.Env):
                 [210, 6, 90, 0, 0.5, 70, 0, 0.9]
             ]
             self.scaler.fit(dummy_features)
-            print("Scaler min (dummy):", self.scaler.data_min_)
-            print("Scaler max (dummy):", self.scaler.data_max_)
     
     def reset(self, seed=None, options=None):
         """Reset environment to random starting point."""
@@ -124,7 +119,6 @@ class PlantHealthAwareEnv(gym.Env):
         
         self.current_step = 0
         self.episode_start = np.random.randint(0, max(1, len(self.corpus_data) - self.episode_length))
-        print(f"Episode starting at index: {self.episode_start}")
         
         return self._get_state(), {}
     
@@ -185,7 +179,6 @@ class PlantHealthAwareEnv(gym.Env):
         if np.any(np.isnan(normalized_features)):
             print(f"⚠️ Warning: NaN detected in normalized state, using defaults")
             normalized_features = np.nan_to_num(normalized_features, nan=0.5)
-        print("Normalized state:", normalized_features)
         
         return normalized_features.astype(np.float32)
     
@@ -217,136 +210,178 @@ class PlantHealthAwareEnv(gym.Env):
         
         return next_state, reward, done, False, info
     
-    def _calculate_delta_exg(self, irrigation_amount, row, tune_positive=False):
-        """Calculate Delta ExG as a function of state and action, with optional tuning for more positive values."""
-        soil_moisture = row.get('Total Soil Moisture', 200)
-        days_after_planting = row.get('Days_After_Planting', 60)
-        if pd.isna(soil_moisture): soil_moisture = 200
-        if pd.isna(days_after_planting): days_after_planting = 60
-        # Base seasonal trend
-        if days_after_planting > 100:
-            base_trend = -0.002
-        elif days_after_planting > 80:
-            base_trend = -0.001
-        else:
-            base_trend = 0.001
-        # Irrigation benefit calculation (tuned)
-        if irrigation_amount > 0:
-            if soil_moisture < 190:
-                # High stress: irrigation helps more
-                irrigation_benefit = 0.015 + (irrigation_amount / 1200) if tune_positive else 0.01 + (irrigation_amount / 2000)
-            elif soil_moisture < 200:
-                irrigation_benefit = 0.007 + (irrigation_amount / 2000) if tune_positive else 0.005 + (irrigation_amount / 3000)
-            else:
-                irrigation_benefit = max(-0.002, irrigation_amount / 5000)
-        else:
-            irrigation_benefit = 0
-        predicted_delta_exg = base_trend + irrigation_benefit
-        predicted_delta_exg = max(-0.01, min(0.05, predicted_delta_exg))
-        return predicted_delta_exg
-    
     def _calculate_plant_health_reward(self, irrigation_amount, row):
-        """Reward: match realistic target irrigation, big bonus for Delta ExG, reduced penalties, strong incentive to irrigate in stress."""
+        """FIXED: Improved reward system addressing all three key issues."""
         soil_moisture = row.get('Total Soil Moisture', 200)
+        current_exg = row.get('ExG', 0.4)
+        days_after_planting = row.get('Days_After_Planting', 60)
         et0 = row.get('ET0 (mm)', 5)
         kc = row.get('Kc (Crop Coefficient)', 0.8)
-        days_after_planting = row.get('Days_After_Planting', 60)
+        
+        # Handle missing values
         if pd.isna(soil_moisture): soil_moisture = 200
+        if pd.isna(current_exg): current_exg = 0.4
+        if pd.isna(days_after_planting): days_after_planting = 60
         if pd.isna(et0): et0 = 5
         if pd.isna(kc): kc = 0.8
-        if pd.isna(days_after_planting): days_after_planting = 60
-        water_deficit = max(0, 210 - soil_moisture)
-        # Set realistic target irrigation
-        if water_deficit > 20:
-            target_irrigation = max(50, et0 * kc + 0.5 * water_deficit)
-        elif water_deficit > 10:
-            target_irrigation = max(25, et0 * kc + 0.3 * water_deficit)
-        else:
-            target_irrigation = 0
-        # Main penalty for missing target
-        reward = -0.2 * abs(irrigation_amount - target_irrigation)
-        # Strong bonus for matching target in stress
-        if abs(irrigation_amount - target_irrigation) < 10 and water_deficit > 10:
-            reward += 20
-        # Calculate Delta ExG (tuned for more positive values in high stress)
-        delta_exg = self._calculate_delta_exg(irrigation_amount, row, tune_positive=True)
-        reward += 100 * delta_exg
-        # Penalty for unnecessary irrigation in low stress
-        if water_deficit < 10 and irrigation_amount > 0:
-            reward -= 5
-        # Reduced cost for every gallon irrigated
-        reward -= 0.05 * irrigation_amount
-        # Add small random noise
-        reward += np.random.uniform(-0.5, 0.5)
-        # Clamp reward
+        
+        reward = 0.0
+        
+        # ISSUE 2 FIX: Recalibrated water stress thresholds
+        water_deficit = max(0, 210 - soil_moisture)  # More generous threshold
+        
+        # Determine stress level
+        if water_deficit > 20:  # High stress (soil < 190)
+            stress_level = 'high'
+        elif water_deficit > 10:  # Medium stress (soil 190-200)
+            stress_level = 'medium'
+        else:  # Low stress (soil > 200)
+            stress_level = 'low'
+        
+        # 1. WATER STRESS RESPONSE (30 points max) - ISSUE 2 FIX
+        if stress_level == 'high':
+            if irrigation_amount >= 50:
+                reward += 30.0  # Good - adequate water for high stress
+            elif irrigation_amount >= 25:
+                reward += 20.0  # Partial - some water but not enough
+            elif irrigation_amount == 0:
+                reward -= 25.0  # Bad - no water when severely stressed
+            else:
+                reward += 10.0  # Minimal help
+        elif stress_level == 'medium':
+            if irrigation_amount >= 25:
+                reward += 25.0  # Good - adequate water for medium stress
+            elif irrigation_amount > 0:
+                reward += 15.0  # Some help
+            else:
+                reward -= 15.0  # Bad - no water when moderately stressed
+        else:  # Low stress
+            if irrigation_amount == 0:
+                reward += 20.0  # Good - save water when not needed
+            elif irrigation_amount <= 25:
+                reward += 5.0   # Minor waste but not terrible
+            else:
+                reward -= 15.0  # Bad - major waste when not needed
+        
+        # 2. TREATMENT TYPE DIFFERENTIATION (25 points max) - ISSUE 1 FIX  
+        # Ensure F_I always gets higher rewards than H_I for same irrigation amounts
+        if self.treatment_type == 'F_I':  # Full irrigation - should be aggressive
+            if irrigation_amount >= 100:
+                reward += 25.0  # Excellent - high irrigation as expected for F_I
+            elif irrigation_amount >= 75:
+                reward += 22.0  # Very good - good irrigation
+            elif irrigation_amount >= 50:
+                reward += 20.0  # Good - moderate irrigation (boosted vs H_I)
+            elif irrigation_amount >= 25:
+                reward += 16.0  # Acceptable - minimal irrigation (boosted vs H_I)
+            elif irrigation_amount > 0:
+                reward += 10.0  # Poor but better than H_I for same amount
+            else:
+                reward -= 20.0  # Bad - no irrigation for F_I treatment
+                
+        elif self.treatment_type == 'H_I':  # Half irrigation - should be moderate
+            if 45 <= irrigation_amount <= 75:
+                reward += 18.0  # Perfect - moderate irrigation for H_I (reduced vs F_I)
+            elif 30 <= irrigation_amount < 45:
+                reward += 16.0  # Good - conservative irrigation (reduced vs F_I)
+            elif 15 <= irrigation_amount < 30:
+                reward += 12.0  # Acceptable - minimal irrigation (same as before)
+            elif irrigation_amount > 75:
+                reward -= 15.0  # Too much for half irrigation
+            elif irrigation_amount > 0:
+                reward += 8.0   # Minimal but something (lower than F_I)
+            else:
+                reward -= 15.0  # Bad - no irrigation for H_I treatment
+                
+        else:  # R_F - Rainfed only
+            if irrigation_amount == 0:
+                reward += 25.0  # Perfect - no irrigation as required
+            else:
+                reward -= 40.0  # Major penalty for irrigating rainfed
+        
+        # 3. PLANT HEALTH PROMOTION (15 points max) - ISSUE 3 FIX
+        # More differentiated rewards based on plant health
+        if current_exg > 0.6:  # Excellent health
+            reward += 15.0
+        elif current_exg > 0.5:  # Good health
+            reward += 12.0
+        elif current_exg > 0.4:  # Moderate health
+            reward += 8.0
+        elif current_exg > 0.3:  # Poor health
+            reward += 4.0
+            # Extra reward for trying to help struggling plant
+            if irrigation_amount > 0 and stress_level in ['high', 'medium']:
+                reward += 3.0  # Trying to help struggling plant
+        else:  # Very poor health - critical
+            reward += 0.0
+            if irrigation_amount > 0 and stress_level in ['high', 'medium']:
+                reward += 6.0  # Strongly reward helping critical plant
+            else:
+                reward -= 8.0  # Strong penalty for not helping critical plant
+        
+        # Seasonal adjustment - reduce irrigation during senescence
+        if days_after_planting > 100:  # Late season
+            if irrigation_amount > 50:
+                reward -= 5.0  # Penalize excessive late-season irrigation
+        
+        # Clamp reward to prevent extreme values
         reward = max(-100.0, min(100.0, reward))
-        # Diagnostics: print for ~1% of calls
-        if np.random.rand() < 0.01:
-            print(f"[DIAG] target: {target_irrigation:.2f}, action: {irrigation_amount}, delta_exg: {delta_exg:.4f}, reward: {reward:.2f}, water_deficit: {water_deficit}")
+        
         return reward
 
 def create_synthetic_training_data():
-    """Create highly diverse synthetic training data for RL."""
+    """Create realistic training data since Lubbock data is too sparse/flawed."""
     print("🔄 Creating synthetic training data for realistic plant responses...")
+    
     dates = pd.date_range('2025-06-01', '2025-09-30', freq='D')
     training_data = []
+    
     for i, date in enumerate(dates):
-        days_after_planting = i + 30
-        # Diverse soil moisture
-        soil_moisture = np.random.uniform(160, 240)
-        # Diverse ExG, seasonally dependent
-        if days_after_planting < 45:
-            exg = np.random.uniform(0.2, 0.5)
-        elif days_after_planting < 95:
-            exg = np.random.uniform(0.4, 0.7)
+        days_after_planting = i + 30  # Start 30 days after planting
+        
+        # Simulate realistic cotton growth patterns
+        if days_after_planting < 45:  # Early growth
+            base_exg = 0.2 + (days_after_planting / 45) * 0.4
+        elif days_after_planting < 95:  # Peak growth  
+            base_exg = 0.6 - (days_after_planting - 45) / 50 * 0.1
+        else:  # Senescence
+            base_exg = max(0.25, 0.5 - (days_after_planting - 95) / 30 * 0.25)
+        
+        # Add some random variation
+        exg = base_exg + np.random.normal(0, 0.05)
+        
+        # Simulate soil moisture (influenced by weather and irrigation)
+        base_moisture = 200 + np.random.normal(0, 10)
+        
+        # Simulate environmental conditions
+        et0 = 4 + np.random.normal(0, 1.5)
+        heat_index = 85 + np.random.normal(0, 8)
+        rainfall = np.random.exponential(1) if np.random.random() < 0.3 else 0
+        
+        # Growth stage dependent Kc
+        if days_after_planting < 40:
+            kc = 0.4 + (days_after_planting / 40) * 0.4
+        elif days_after_planting < 90:
+            kc = 0.8 + (days_after_planting - 40) / 50 * 0.3
         else:
-            exg = np.random.uniform(0.2, 0.5)
-        # Diverse ET0
-        et0 = np.random.uniform(3.5, 7.5)
-        # Diverse heat index
-        heat_index = np.random.uniform(75, 96)
-        # Diverse rainfall
-        rainfall = np.random.exponential(2) if np.random.random() < 0.3 else 0
-        # Diverse Kc
-        kc = np.random.uniform(0.4, 1.1)
+            kc = max(0.4, 1.1 - (days_after_planting - 90) / 30 * 0.3)
+        
         training_data.append({
             'Date': date,
-            'Plot ID': 999,
+            'Plot ID': 999,  # Synthetic plot
             'Treatment Type': 'SYNTH',
             'ExG': round(exg, 4),
-            'Total Soil Moisture': round(soil_moisture, 1),
+            'Total Soil Moisture': round(base_moisture, 1),
             'ET0 (mm)': round(et0, 2),
             'Heat Index (F)': round(heat_index, 1),
             'Rainfall (gallons)': round(rainfall, 2),
             'Kc (Crop Coefficient)': round(kc, 3),
             'Days_After_Planting': days_after_planting
         })
+    
     df = pd.DataFrame(training_data)
     print(f"Created {len(df)} synthetic training samples")
     return df
-
-# Diagnostic: plot state diversity
-def plot_state_diversity(env):
-    features = []
-    for _, row in env.corpus_data.iterrows():
-        soil_moisture = row.get('Total Soil Moisture', 200)
-        et0 = row.get('ET0 (mm)', 5)
-        heat_index = row.get('Heat Index (F)', 85)
-        rainfall = row.get('Rainfall (gallons)', 0)
-        exg = row.get('ExG', 0.4)
-        days_after_planting = row.get('Days_After_Planting', 60)
-        kc = row.get('Kc (Crop Coefficient)', 0.8)
-        water_deficit = max(0, 200 - soil_moisture)
-        features.append([soil_moisture, et0, heat_index, rainfall, exg, days_after_planting, water_deficit, kc])
-    features = np.array(features)
-    labels = ['Soil Moisture', 'ET0', 'Heat Index', 'Rainfall', 'ExG', 'Days After Planting', 'Water Deficit', 'Kc']
-    plt.figure(figsize=(16, 8))
-    for i in range(features.shape[1]):
-        plt.subplot(2, 4, i+1)
-        plt.hist(features[:, i], bins=20)
-        plt.title(labels[i])
-    plt.tight_layout()
-    plt.show()
 
 def train_plant_health_policy(treatment_type='H_I', total_timesteps=40000):
     """Train irrigation policy focused on plant health using PPO."""
@@ -375,33 +410,27 @@ def train_plant_health_policy(treatment_type='H_I', total_timesteps=40000):
     
     print(f"Training data: {len(training_data)} real + {len(synthetic_data)} synthetic = {len(combined_data)} total samples")
     
-    # Print sample and describe of training data
-    print("Sample of training data used for RL:")
-    print(combined_data.sample(10))
-    print("Feature ranges:")
-    print(combined_data.describe())
-    
     # Create environment
     env = PlantHealthAwareEnv(combined_data, treatment_type)
     
-    # Create PPO agent - optimized for final production run (50k timesteps)
+    # Create PPO agent (much more stable than DQN, prevents NaN loss)
     model = PPO(
         'MlpPolicy',
         env,
-        learning_rate=2e-4,     # Slightly reduced for stable convergence in long training
-        n_steps=4096,           # Increased steps per update for longer episodes
-        batch_size=128,         # Larger batch size for stable gradients
+        learning_rate=3e-4,     # PPO standard learning rate
+        n_steps=2048,           # Steps per update
+        batch_size=64,          # Batch size for optimization
         n_epochs=10,            # Number of epochs per update
         gamma=0.99,             # Discount factor
         gae_lambda=0.95,        # GAE lambda
         clip_range=0.2,         # PPO clip range
-        ent_coef=0.1,           # INCREASED: Encourage even more exploration/adaptivity
+        ent_coef=0.01,          # Entropy coefficient for exploration
         vf_coef=0.5,            # Value function coefficient
         max_grad_norm=0.5,      # Gradient clipping
         verbose=1,
         device='auto',
         policy_kwargs=dict(
-            net_arch=[128, 128, 64],  # Larger network for better representation
+            net_arch=[64, 64],   # Network architecture
             activation_fn=torch.nn.Tanh  # Stable activation function
         )
     )
@@ -409,29 +438,9 @@ def train_plant_health_policy(treatment_type='H_I', total_timesteps=40000):
     # Train model
     print(f"Training for {total_timesteps} timesteps...")
     model.learn(total_timesteps=total_timesteps)
-
-    # Diagnostic: plot action distribution after training
-    print("\n🔍 Plotting action distribution after training...")
-    actions = []
-    for _ in range(200):
-        idx = np.random.randint(0, len(env.corpus_data))
-        env.current_step = idx
-        state = env._get_state()
-        action, _ = model.predict(state, deterministic=True)
-        actions.append(env.irrigation_amounts[action])
-    plt.figure(figsize=(8,4))
-    plt.hist(actions, bins=len(set(actions)), rwidth=0.8)
-    plt.title(f'Action Distribution after PPO Training ({treatment_type})')
-    plt.xlabel('Irrigation Amount (gallons)')
-    plt.ylabel('Frequency')
-    plt.show()
     
-    # Diagnostic: plot reward sensitivity for random states
-    print("\n🔍 Plotting reward sensitivity for random states...")
-    plot_reward_sensitivity(env, num_states=5)
-    
-    # Save model to proper directory
-    model_path = f"../models/ppo/plant_health_ppo_{treatment_type}_50k.zip"
+    # Save model
+    model_path = f"plant_health_ppo_{treatment_type}.zip"
     model.save(model_path)
     print(f"PPO model saved to: {model_path}")
     
@@ -590,10 +599,9 @@ def apply_plant_health_policy(model, treatment_type='H_I'):
 
 def main():
     """Main training and application pipeline with plant health focus using PPO."""
-    print("🌱 PLANT HEALTH IRRIGATION SYSTEM - PPO FINAL PRODUCTION RUN")
-    print("=" * 70)
+    print("🌱 PLANT HEALTH IRRIGATION SYSTEM - PPO")
+    print("=" * 60)
     print("Training policies with PPO that prioritize plant health over expert imitation")
-    print("OPTIMIZED FOR 50K TIMESTEPS - FINAL PRODUCTION DATA GENERATION")
     print()
     
     all_recommendations = []
@@ -602,8 +610,8 @@ def main():
     for treatment in ['H_I', 'F_I']:
         print(f"\n📚 Processing treatment: {treatment}")
         
-        # Train plant-health-focused policy with PPO - Final Production Run
-        model, env = train_plant_health_policy(treatment, total_timesteps=50000)  # Full training for production
+        # Train plant-health-focused policy with PPO
+        model, env = train_plant_health_policy(treatment, total_timesteps=5000)  # Reduced for PPO testing
         
         if model is not None:
             # Apply to Corpus Christi
@@ -622,7 +630,7 @@ def main():
         # Sort by Date first, then Treatment Type for easy day-by-day comparison
         df_recommendations = df_recommendations.sort_values(['Date', 'Treatment Type'])
         
-        output_file = '../outputs/policy_transfer_recommendations_50k_final.csv'
+        output_file = 'policy_transfer_recommendations.csv'
         df_recommendations.to_csv(output_file, index=False)
         
         print(f"\n✅ POLICY TRANSFER COMPLETE")
@@ -796,68 +804,6 @@ def main_multi_seed():
         output_file = 'policy_transfer_multi_seed_recommendations.csv'
         combined_df.to_csv(output_file, index=False)
         print(f"\n📁 Multi-seed results saved to: {output_file}")
-
-def print_policy_action_distribution(model, env):
-    actions = []
-    for _ in range(100):
-        idx = np.random.randint(0, len(env.corpus_data))
-        env.current_step = idx
-        state = env._get_state()
-        action, _ = model.predict(state, deterministic=True)
-        actions.append(env.irrigation_amounts[action])
-    print("Action distribution over 100 random states:", actions)
-    print("Unique actions:", set(actions))
-
-def print_reward_sensitivity(env):
-    for _ in range(5):
-        idx = np.random.randint(0, len(env.corpus_data))
-        row = env.corpus_data.iloc[idx]
-        print(f"\nState {idx}:")
-        for action in range(len(env.irrigation_amounts)):
-            irrigation = env.irrigation_amounts[action]
-            reward = env._calculate_plant_health_reward(irrigation, row)
-            print(f"  Action {action} (Irrigation {irrigation}): Reward = {reward:.2f}")
-
-# Add a function to plot reward sensitivity for a random sample of states
-
-def plot_reward_sensitivity(env, num_states=5):
-    import matplotlib.pyplot as plt
-    import os
-    np.random.seed(42)
-    os.makedirs('../outputs', exist_ok=True)
-    sample_indices = np.random.choice(len(env.corpus_data), size=min(num_states, len(env.corpus_data)), replace=False)
-    for idx in sample_indices:
-        row = env.corpus_data.iloc[idx]
-        rewards = []
-        delta_exgs = []
-        for action in range(len(env.irrigation_amounts)):
-            irrigation = env.irrigation_amounts[action]
-            reward = env._calculate_plant_health_reward(irrigation, row)
-            delta_exg = env._calculate_delta_exg(irrigation, row)
-            rewards.append(reward)
-            delta_exgs.append(delta_exg)
-        # Plot reward vs. action
-        plt.figure(figsize=(8,4))
-        plt.bar([str(a) for a in env.irrigation_amounts], rewards)
-        plt.title(f'Reward vs. Action (State idx {idx})')
-        plt.xlabel('Irrigation Amount (gallons)')
-        plt.ylabel('Reward')
-        reward_path = f'../outputs/reward_sensitivity_state_{idx}.png'
-        plt.tight_layout()
-        plt.savefig(reward_path)
-        print(f'Reward sensitivity plot saved: {reward_path}')
-        plt.close()
-        # Plot Delta ExG vs. action
-        plt.figure(figsize=(8,4))
-        plt.bar([str(a) for a in env.irrigation_amounts], delta_exgs, color='green')
-        plt.title(f'Delta ExG vs. Action (State idx {idx})')
-        plt.xlabel('Irrigation Amount (gallons)')
-        plt.ylabel('Delta ExG')
-        exg_path = f'../outputs/delta_exg_sensitivity_state_{idx}.png'
-        plt.tight_layout()
-        plt.savefig(exg_path)
-        print(f'Delta ExG sensitivity plot saved: {exg_path}')
-        plt.close()
 
 if __name__ == "__main__":
     # Run single seed version by default
