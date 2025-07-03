@@ -44,7 +44,7 @@
 
 **Files Updated:**
 - `corpus_ml.py`: Line 26 - Updated `COTTON_PLANTING_DATE`
-- `enhanced_analysis.py`: Line 53 - Updated planting date reference
+- `accuracy_analysis.py`: Line 76 - Updated planting date reference
 
 **Code Changes:**
 ```python

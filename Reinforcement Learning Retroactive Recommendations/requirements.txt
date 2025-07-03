@@ -1,0 +1,24 @@
+# Core Machine Learning and Reinforcement Learning
+torch>=1.9.0,<2.1.0
+stable-baselines3>=1.5.0,<2.0.0
+gymnasium>=0.26.0,<1.0.0
+
+# Data Processing and Analysis
+pandas>=1.3.0,<2.1.0
+numpy>=1.21.0,<1.25.0
+scikit-learn>=1.0.0,<1.4.0
+
+# Environment and Utilities
+gym>=0.21.0  # For backward compatibility if needed
+cloudpickle>=1.6.0  # Required by stable-baselines3
+
+# Optional but Recommended for Performance
+# Uncomment if GPU acceleration is available
+# torch-audio>=0.9.0  # For CUDA support if needed
+
+# Development and Testing (optional)
+pytest>=6.0.0  # For running test scripts
+matplotlib>=3.3.0  # For plotting if visualization needed
+
+# System Requirements
+# Python>=3.7,<3.11  # Supported Python versions (note in comments since pip handles this) 
