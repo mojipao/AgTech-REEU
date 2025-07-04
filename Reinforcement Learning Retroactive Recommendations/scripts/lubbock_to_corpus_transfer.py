@@ -62,13 +62,15 @@ class LubbockTrainingEnv(gym.Env):
         
         self.training_data = treatment_data.sort_values('Date').reset_index(drop=True)
         
-        # Irrigation amounts based on treatment type
+        # Irrigation amounts based on treatment type - FIXED to match historical data
         if treatment_type in ['DICT', 'DIEG']:  # Deficit irrigation (65%)
-            self.irrigation_amounts = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]  # gallons
+            # Historical DICT/DIEG: 1500-7000 gallons, scaled down by factor of 50
+            self.irrigation_amounts = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400]  # gallons
         elif treatment_type in ['FICT', 'FIEG']:  # Full irrigation (100%)
-            self.irrigation_amounts = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150]  # gallons
+            # Historical FICT/FIEG: 2500-9000+ gallons, scaled down by factor of 50
+            self.irrigation_amounts = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2200]  # gallons
         else:
-            self.irrigation_amounts = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]  # default
+            self.irrigation_amounts = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400]  # default
             
         self.action_space = spaces.Discrete(len(self.irrigation_amounts))
         
@@ -253,9 +255,9 @@ class LubbockTrainingEnv(gym.Env):
         
         # Water stress assessment
         if soil_moisture < 190:  # High stress
-            water_stress_penalty = -0.02
+            water_stress_penalty = -0.05  # Increased penalty
         elif soil_moisture < 200:  # Medium stress
-            water_stress_penalty = -0.01
+            water_stress_penalty = -0.03
         else:  # Low stress
             water_stress_penalty = 0
         
@@ -457,8 +459,9 @@ def apply_lubbock_policy_to_corpus(model, treatment_type, scaling_factors):
     # Climate scaling factor (reduce irrigation for Corpus's higher humidity)
     climate_factor = scaling_factors.get('ET0_ratio', 0.8)  # Default to 0.8 if not calculated
     
-    # Combined scaling factor
-    total_scaling = plot_size_ratio * treatment_ratio * climate_factor
+    # Combined scaling factor - ADJUSTED to be less aggressive
+    # The plot size ratio is the main factor, others are secondary
+    total_scaling = plot_size_ratio * 0.8  # Simplified scaling focusing on plot size
     
     print(f"Scaling factors:")
     print(f"  Plot size ratio: {plot_size_ratio:.4f}")
@@ -518,14 +521,19 @@ def apply_lubbock_policy_to_corpus(model, treatment_type, scaling_factors):
                 
                 # Get irrigation amount from Lubbock action space
                 if treatment_type in ['DICT', 'DIEG']:
-                    lubbock_amounts = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+                    lubbock_amounts = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400]
                 else:  # FICT, FIEG
-                    lubbock_amounts = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150]
+                    lubbock_amounts = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2200]
                 
                 lubbock_irrigation = lubbock_amounts[action]
                 
                 # Apply scaling factors
                 recommended_irrigation = lubbock_irrigation * total_scaling
+                
+                # Apply correction factor to convert training amounts to realistic levels
+                # Training amounts are scaled down by ~50x from historical amounts
+                correction_factor = 50.0  # Convert training amounts back to realistic levels
+                recommended_irrigation = recommended_irrigation * correction_factor
                 
             except Exception as e:
                 print(f"Error in prediction: {e}")
