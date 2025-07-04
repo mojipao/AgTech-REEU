@@ -41,202 +41,76 @@ This study develops and validates an enhanced machine learning framework to:
 
 ## 2. Methodology
 
-### 2.1 Data Integration Architecture
+### 2.1 Data Sources and Integration
 
-Our approach integrates two complementary datasets to leverage both local specificity and broader seasonal patterns:
+The enhanced ML pipeline integrates two primary datasets:
+- **Corpus Christi field data (2025):** All available historical observations (preserved 100%, never modified).
+- **Lubbock field data (2023):** Used to provide seasonal patterns and support model training, but down-weighted relative to Corpus data.
 
-#### 2.1.1 Corpus Christi Historical Data (Primary Dataset)
-- **Temporal Coverage**: June 4 - July 1, 2025 (28 days)
-- **Sample Size**: 83 observations (n=27-28 per treatment)
-- **Variables**: ExG, Soil Moisture, Heat Index, ET₀, Rainfall, Treatment Type
-- **Status**: Preserved at 100% - never modified or overwritten
-- **Weight**: 3× multiplier in model training (target location priority)
+All data are loaded, cleaned, and combined for model training. Corpus data is prioritized with a 3x sample weight for target variables (ExG, soil moisture), and a 2x weight for environmental variables (ET₀, heat index, rainfall). Lubbock data is used with a 1x weight.
 
-#### 2.1.2 Lubbock Reference Data (Supporting Dataset)  
-- **Temporal Coverage**: May 1 - October 31, 2023 (184 days)
-- **Sample Size**: 1,288 observations across complete cotton season
-- **Purpose**: Seasonal pattern templates and enhanced model training
-- **Weight**: 1× base weight (supporting patterns)
-- **Geographic Adjustment**: +6°F coastal temperature differential applied
+### 2.2 Feature Engineering
 
-### 2.2 Enhanced Machine Learning Architecture
+The feature set is intentionally simplified to prevent overfitting and ensure robust generalization. For each target variable, the following features are used:
 
-#### 2.2.1 Multi-Variable Random Forest Framework
+- **ExG (plant health):**
+  - Days after planting
+  - Heat Index (F)
+  - ET₀ (mm)
+  - Total Soil Moisture (gallons)
+  - Rainfall (gallons)
+  - Month
+  - Day of year
+  - Location indicator (1 = Corpus Christi, 0 = Lubbock)
 
-The system employs five specialized Random Forest models, each optimized for specific agricultural variables:
+- **Soil Moisture:**
+  - Days after planting
+  - Heat Index (F)
+  - ET₀ (mm)
+  - Rainfall (gallons)
+  - Irrigation Added (gallons)
+  - Month
+  - Day of year
+  - Location indicator
 
-**Model 1: Excess Green Index (ExG) Prediction**
-```
-ExG(t) = f_RF(DAP, T_heat, ET₀, SM, R, I_rf, I_hi, I_fi, K_c, M, DOY, L_corpus, S_seas, C_seas)
-```
+- **Environmental Variables (ET₀, Heat Index, Rainfall):**
+  - Days after planting
+  - Month
+  - Day of year
+  - Location indicator
 
-Where:
-- DAP = Days After Planting (corrected to April 3, 2025)
-- T_heat = Heat Index (°F)
-- ET₀ = Reference evapotranspiration (mm/day)
-- SM = Total soil moisture
-- R = Rainfall (gallons)
-- I_rf, I_hi, I_fi = Binary treatment indicators (rainfed, half, full irrigation)
-- K_c = Cotton crop coefficient (Texas A&M validated)
-- M = Month, DOY = Day of year
-- L_corpus = Location indicator (1=Corpus Christi, 0=Lubbock)
-- S_seas, C_seas = Seasonal harmonics (sin/cos annual patterns)
+No complex seasonal harmonics, one-hot encodings, or physics-based features are used in the current pipeline.
 
-**Model 2: Soil Moisture Dynamics**
-```
-SM(t) = α × SM_physics(t) + (1-α) × SM_ML(t)
-```
+### 2.3 Model Structure and Training
 
-Where α = 0.3 (physics weight) and:
-```
-SM_physics(t) = SM(t-1) + R(t) + I(t) - ET_actual(t) - D(t)
-SM_ML(t) = f_RF(DAP, T_heat, ET₀, R, I_total, treatment_indicators, K_c, temporal_features)
-```
+For each target variable, a separate Random Forest Regressor is trained using the features above. All models use:
+- 50 trees (n_estimators=50)
+- Maximum depth of 5 (max_depth=5)
+- Time series cross-validation (3 folds) to prevent data leakage
+- Sample weights as described above
 
-With constraints: 180 ≤ SM(t) ≤ 320 gallons per plot
+All features are standardized using a StandardScaler (or MinMaxScaler for RL compatibility). Models are trained on the combined, weighted dataset and validated using time series splits.
 
-**Model 3: Heat Index with Coastal Adjustment**
-```
-T_heat,Corpus(t) = T_heat,Lubbock(DOY) + ΔT_coastal + ε_local(t)
-```
+### 2.4 Synthetic Data Generation
 
-Where:
-- ΔT_coastal = +6°F (Gulf Coast proximity adjustment)
-- Seasonal constraints: [78°F, 86°F] spring/fall, [88°F, 96°F] summer
-- ε_local represents local weather variability
+The generator creates a full synthetic season (April 3 – October 31, 2025) for Corpus Christi by:
+- Predicting daily weather variables (rainfall, ET₀, heat index) using the trained ML models and Lubbock seasonal patterns
+- Predicting ExG and soil moisture using the trained models, with previous day’s soil moisture as input
+- Applying Texas A&M cotton crop coefficient (Kc) values based on days after planting
+- No irrigation is added in synthetic data generation (irrigation is handled by RL in downstream steps)
 
-**Model 4: Reference Evapotranspiration (ET₀)**
-```
-ET₀(t) = f_RF(DAP, M, DOY, weekday, harmonic_features, K_c, L_corpus)
-```
+### 2.5 Validation and Performance Metrics
 
-Constrained: 3.5 ≤ ET₀(t) ≤ 7.5 mm/day
+Model performance is evaluated using:
+- R², RMSE, and MAE for each target variable
+- 3-fold time series cross-validation
+- Treatment-specific accuracy (rainfed, half, full irrigation)
+- Seasonal pattern validation (monthly/weekly trends)
+- Agricultural realism checks (e.g., ExG within physiological ranges, soil moisture within 180–320 gallons)
 
-**Model 5: Rainfall Distribution**
-```
-R(t) = R_Lubbock(DOY) × scale_factor + stochastic_component
-```
+### 2.6 Output and Reproducibility
 
-Using natural Lubbock daily precipitation distributions by calendar day
-
-#### 2.2.2 Cotton Crop Coefficient Integration
-
-Texas A&M validated cotton crop coefficients (K_c) provide physiological constraints:
-
-```
-K_c(DAP) = {
-    0.07,  if 0 ≤ DAP ≤ 10    (Seeding)
-    0.22,  if 32 ≤ DAP ≤ 40   (First Square)  
-    0.44,  if 55 ≤ DAP ≤ 60   (First Bloom)
-    1.10,  if 70 ≤ DAP ≤ 90   (Maximum Bloom)
-    0.83,  if 115 ≤ DAP ≤ 125 (25% Open Bolls)
-    0.10,  if 140 ≤ DAP ≤ 150 (Harvest Ready)
-}
-```
-
-Linear interpolation applied between growth stages.
-
-#### 2.2.3 Treatment-Specific Irrigation Calculations
-
-**Rainfed Treatment (R_F)**:
-```
-I_total(t) = 0  (natural precipitation only)
-```
-
-**Half Irrigation Treatment (H_I)**:
-```
-I_total(t) = max(0, 0.5 × ET₀(t) × K_c(DAP) × A_plot - R_effective(t))
-```
-
-**Full Irrigation Treatment (F_I)**:
-```
-I_total(t) = max(0, ET₀(t) × K_c(DAP) × A_plot - R_effective(t))
-```
-
-Where:
-- A_plot = 443.5 sq ft plot area
-- R_effective = irrigation-equivalent rainfall (gallons)
-- Conversion factor: 277 gallons = 1 inch water depth
-
-### 2.3 Enhanced Training Data Preparation
-
-#### 2.3.1 Feature Engineering
-
-**Temporal Features**:
-```
-f_temporal = [DAP, month, day_of_year, weekday, week_of_season]
-```
-
-**Seasonal Harmonics**:
-```
-f_seasonal = [sin(2π × DOY/365), cos(2π × DOY/365), 
-              sin(4π × DOY/365), cos(4π × DOY/365)]
-```
-
-**Treatment Encoding**:
-```
-f_treatment = [I_rainfed, I_half_irrigation, I_full_irrigation]  (one-hot)
-```
-
-**Location Context**:
-```
-f_location = [is_corpus_christi, distance_from_summer_solstice]
-```
-
-#### 2.3.2 Weighted Training Strategy
-
-**Sample Weights**:
-- Corpus Christi observations: w = 3.0 (target location priority)
-- Lubbock observations: w = 1.0 (supporting patterns)
-- Environmental variables: w = 2.0 (Corpus), w = 1.0 (Lubbock)
-
-**Training Set Composition**:
-- ExG: 15 Corpus + 140 Lubbock = 155 total samples
-- Soil Moisture: 77 Corpus + 388 Lubbock = 465 total samples  
-- Heat Index: 77 Corpus + 344 Lubbock = 421 total samples
-- ET₀: 74 Corpus + 366 Lubbock = 440 total samples
-- Rainfall: 74 Corpus + 1,288 Lubbock = 1,362 total samples
-
-### 2.4 Validation Framework
-
-#### 2.4.1 Model Performance Metrics
-
-**Primary Metrics**:
-- R² (coefficient of determination)
-- RMSE (root mean squared error)  
-- MAE (mean absolute error)
-- 5-fold cross-validation scores
-
-**Agricultural Metrics**:
-- Treatment-specific relative error (%)
-- Irrigation decision accuracy (binary classification)
-- Heat stress detection accuracy (>95°F threshold)
-- Vegetation vigor classification (ExG >0.6 threshold)
-
-#### 2.4.2 Temporal Consistency Validation
-
-**Growth Stage Accuracy**:
-```
-Accuracy_stage = |ExG_synthetic,stage - ExG_expected,stage| / ExG_expected,stage
-```
-
-**Seasonal Progression**:
-```
-Correlation_seasonal = corr(ExG_monthly,hist, ExG_monthly,synth)
-```
-
-Where monthly averages are computed for overlapping time periods.
-
-#### 2.4.3 Distribution Similarity Testing
-
-**Kolmogorov-Smirnov Test**:
-```
-H₀: F_historical(x) = F_synthetic(x)  (identical distributions)
-H₁: F_historical(x) ≠ F_synthetic(x)  (different distributions)
-```
-
-Test statistic: D = sup_x |F_historical(x) - F_synthetic(x)|
-Significance level: α = 0.05
+All scripts use robust, script-relative paths for data access and output. The main output is a complete synthetic dataset for the 2025 Corpus Christi season, saved in the `data/` directory. All results are fully reproducible using the provided codebase and documented workflow.
 
 ## 3. Results and Performance Analysis
 
@@ -562,21 +436,21 @@ The achievement of 92.7-99.7% model accuracy while maintaining agricultural real
 
 ### A.2 File Organization
 ```
-Models/
-├── scripts/          # Core analysis scripts
-│   ├── corpus_ml.py     # Synthetic data generation
-│   └── accuracy_analysis.py # Comprehensive validation
-├── data/             # Input datasets and generated output
-│   ├── Model Input - Corpus.csv
-│   ├── Model Input - Lubbock-3.csv
-│   └── corpus_season_completed_enhanced_lubbock_ml.csv
-├── analysis/         # Generated plots and visualizations
-├── docs/            # Documentation and reports
-└── requirements.txt  # Python dependencies
+Corpus Christi Synthetic ML Forecasting/
+  data/             # Input datasets and generated output
+    Model Input - Corpus.csv
+    Model Input - Lubbock-3.csv
+    corpus_season_completed_enhanced_lubbock_ml.csv
+  scripts/          # Core analysis scripts
+    corpus_ml.py     # Synthetic data generation
+    accuracy_analysis.py # Comprehensive validation
+  analysis/         # Generated plots and visualizations
+  docs/             # Documentation and reports
+  requirements.txt  # Python dependencies
 ```
 
-### A.3 Reproducibility
-All results are fully reproducible using the provided codebase. The corrected planting date (April 3, 2025) and enhanced weighted training approach ensure consistent model performance across runs.
+### A.4 Path Handling Note
+All scripts now use robust, script-relative paths for all data access and output. This ensures reproducibility and prevents file not found errors regardless of the working directory.
 
 ---
 

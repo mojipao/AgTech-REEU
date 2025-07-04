@@ -45,298 +45,156 @@ This study develops and validates a reinforcement learning framework to:
 
 ## 2. Methodology
 
-### 2.1 Reinforcement Learning Environment Design
+### 2.1 RL Environment and State Representation
 
-#### 2.1.1 State Space Definition
+The RL environment is designed to train irrigation policies on Lubbock field data and transfer them to Corpus Christi with robust scaling. The environment is implemented in `lubbock_to_corpus_transfer.py` and features:
 
-The agricultural state representation captures eight critical variables affecting irrigation decisions:
+- **State vector (8 features):**
+  1. Total Soil Moisture (gallons)
+  2. ET₀ (mm)
+  3. Heat Index (F)
+  4. Rainfall (gallons)
+  5. ExG (plant health)
+  6. Days after planting
+  7. Water deficit (max(0, 200 - soil moisture))
+  8. Kc (crop coefficient)
+- **State normalization:** MinMaxScaler fitted on Lubbock training data.
+- **NaN handling:** All missing values are replaced with robust defaults.
 
-**State Vector Components**:
-```
-s_t = [SM_t, ET_0t, HI_t, R_t, ExG_t, DAP_t, WD_t, K_ct]
-```
+### 2.2 Action Space
+
+- **Deficit irrigation (DICT, DIEG):** 11 discrete actions: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] gallons
+- **Full irrigation (FICT, FIEG):** 11 discrete actions: [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150] gallons
+- **Rainfed:** [0] gallons (no irrigation)
+
+### 2.3 Reward Function
+
+The reward is designed to encourage plant health improvement, water stress mitigation, and water use efficiency. For each step:
+- **Base seasonal trend:**
+  - +0.001 (early season, DAP ≤ 80)
+  - -0.001 (mid-season, 80 < DAP ≤ 100)
+  - -0.002 (late season, DAP > 100)
+- **Water stress penalty:**
+  - -0.02 (high stress, soil moisture < 190)
+  - -0.01 (medium stress, 190 ≤ soil moisture < 200)
+  - 0 (low stress)
+- **Irrigation benefit:**
+  - If irrigation > 0:
+    - +0.01 + (irrigation/2000) (high stress)
+    - +0.005 + (irrigation/3000) (medium stress)
+    - max(-0.002, irrigation/5000) (low stress)
+  - Else: 0
+- **Water efficiency penalty:** -0.001 × (irrigation/100)
+- **Total reward:** Sum of all above components
+
+**Mathematical Formula:**
+
+Let:
+- DAP = days after planting
+- SM = soil moisture (gallons)
+- I = irrigation amount (gallons)
+
+Then:
+
+\[
+\text{reward} = \text{base\_trend} + \text{water	extunderscore stress	extunderscore penalty} + \text{irrigation	extunderscore benefit} + \text{water	extunderscore efficiency	extunderscore penalty}
+\]
 
 Where:
-- `SM_t` = Total soil moisture (gallons/plot)
-- `ET_0t` = Reference evapotranspiration (mm/day)  
-- `HI_t` = Heat Index (°F)
-- `R_t` = Rainfall (gallons)
-- `ExG_t` = Excess Green Index (vegetation vigor)
-- `DAP_t` = Days After Planting (growth stage indicator)
-- `WD_t` = Water deficit = max(0, 200 - SM_t)
-- `K_ct` = Cotton crop coefficient (growth stage dependent)
 
-**State Normalization**:
-```
-s_normalized = MinMaxScaler(s_raw)
-```
+\[
+\text{base	extunderscore trend} =
+\begin{cases}
+  +0.001 & \text{if } \text{DAP} \leq 80 \\
+  -0.001 & \text{if } 80 < \text{DAP} \leq 100 \\
+  -0.002 & \text{if } \text{DAP} > 100
+\end{cases}
+\]
 
-Bounds: `s_normalized ∈ [-3, 3]^8` with robust NaN handling
+\[
+\text{water	extunderscore stress	extunderscore penalty} =
+\begin{cases}
+  -0.02 & \text{if } \text{SM} < 190 \\
+  -0.01 & \text{if } 190 \leq \text{SM} < 200 \\
+  0 & \text{if } \text{SM} \geq 200
+\end{cases}
+\]
 
-**NaN Handling Protocol**:
+\[
+\text{irrigation	extunderscore benefit} =
+\begin{cases}
+  0.01 + \frac{I}{2000} & \text{if } I > 0 \text{ and } \text{SM} < 190 \\
+  0.005 + \frac{I}{3000} & \text{if } I > 0 \text{ and } 190 \leq \text{SM} < 200 \\
+  \max(-0.002, \frac{I}{5000}) & \text{if } I > 0 \text{ and } \text{SM} \geq 200 \\
+  0 & \text{if } I = 0
+\end{cases}
+\]
+
+\[
+\text{water	extunderscore efficiency	extunderscore penalty} = -0.001 \times \frac{I}{100}
+\]
+
+**Pseudocode:**
+
 ```python
-if pd.isna(feature_value):
-    feature_value = default_values[feature_index]
-    
-default_values = [200, 5, 85, 0, 0.4, 60, 0, 0.8]
-```
-
-#### 2.1.2 Action Space Architecture
-
-Treatment-specific discrete action spaces reflect irrigation protocol constraints (EXPANDED for more diversity):
-
-**Full Irrigation (F_I)**:
-```
-A_FI = {0, 10, 20, 30, 40, 50, 60, 75, 90, 110, 130, 150} gallons
-|A_FI| = 12 actions
-```
-
-**Half Irrigation (H_I)**:
-```
-A_HI = {0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75, 90} gallons  
-|A_HI| = 14 actions
-```
-
-**Rainfed (R_F)**:
-```
-A_RF = {0} gallons
-|A_RF| = 1 action (constraint enforcement)
-```
-
-#### 2.1.3 Episode Structure
-
-**Episode Length**: 15 time steps (approximately 2-week decision cycles)
-**Episode Initialization**: Random starting point within available data
-**Termination Conditions**: 
-- Episode length reached OR
-- End of available data
-
-### 2.2 Adaptive, Plant Health-Focused Reward Function
-
-The reward function is designed to directly incentivize adaptive, state-sensitive irrigation that maximizes plant health (as measured by Delta ExG) and matches agronomic need. It replaces the previous rule-based, point-allocation system with a formula-based, physiologically grounded approach:
-
-#### 2.2.1 Target Irrigation Calculation
-
-For each step, compute:
-```
-water_deficit = max(0, 210 - soil_moisture)
-if water_deficit > 20:
-    target_irrigation = max(50, et0 * kc + 0.5 * water_deficit)
-elif water_deficit > 10:
-    target_irrigation = max(25, et0 * kc + 0.3 * water_deficit)
-else:
-    target_irrigation = 0
-```
-
-#### 2.2.2 Reward Formula
-
-Let `a_t` be the irrigation action (gallons), and `target_irrigation` as above. Let `delta_exg` be the predicted plant health improvement (see below).
-
-The reward is:
-```
-reward = -0.2 * abs(a_t - target_irrigation)   # Penalty for missing target
-if abs(a_t - target_irrigation) < 10 and water_deficit > 10:
-    reward += 20                                # Bonus for matching target in stress
-reward += 100 * delta_exg                       # Strong bonus for plant health improvement
-if water_deficit < 10 and a_t > 0:
-    reward -= 5                                 # Penalty for unnecessary irrigation in low stress
-reward -= 0.05 * a_t                            # Cost for every gallon irrigated
-reward += Uniform(-0.5, 0.5)                    # Small random noise
-reward = clamp(reward, -100, 100)               # Clamp to [-100, 100]
-```
-
-#### 2.2.3 Delta ExG Calculation
-
-Delta ExG is predicted as a function of state and action:
-```
-if days_after_planting > 100:
+if DAP > 100:
     base_trend = -0.002
-elif days_after_planting > 80:
+elif DAP > 80:
     base_trend = -0.001
 else:
     base_trend = 0.001
 
-if a_t > 0:
-    if soil_moisture < 190:
-        irrigation_benefit = 0.015 + (a_t / 1200)
-    elif soil_moisture < 200:
-        irrigation_benefit = 0.007 + (a_t / 2000)
+if SM < 190:
+    water_stress_penalty = -0.02
+elif SM < 200:
+    water_stress_penalty = -0.01
+else:
+    water_stress_penalty = 0
+
+if I > 0:
+    if SM < 190:
+        irrigation_benefit = 0.01 + (I / 2000)
+    elif SM < 200:
+        irrigation_benefit = 0.005 + (I / 3000)
     else:
-        irrigation_benefit = max(-0.002, a_t / 5000)
+        irrigation_benefit = max(-0.002, I / 5000)
 else:
     irrigation_benefit = 0
 
-delta_exg = clamp(base_trend + irrigation_benefit, -0.01, 0.05)
+water_efficiency_penalty = -0.001 * (I / 100)
+
+reward = base_trend + water_stress_penalty + irrigation_benefit + water_efficiency_penalty
 ```
 
-#### 2.2.4 Adaptivity and Plant Health Focus
+### 2.4 Training and Policy Transfer
 
-- The agent is rewarded for matching irrigation to the physiological need of the plant, not for fixed or repetitive actions.
-- Large bonuses for positive Delta ExG ensure the policy prioritizes plant health improvement.
-- Penalties for waste and unnecessary irrigation promote water efficiency.
-- The reward is continuous and state-sensitive, enabling nuanced, adaptive policies.
+- **Training:**
+  - RL agent (PPO, 2-layer MLP, Tanh activation) is trained for each Lubbock treatment (DICT, DIEG, FICT, FIEG) for 8,000 timesteps each.
+  - Training is performed on Lubbock data only, with robust state normalization and NaN handling.
+- **Policy transfer:**
+  - Trained Lubbock policies are mapped to Corpus Christi treatments:
+    - DICT/DIEG → H_I (half irrigation)
+    - FICT/FIEG → F_I (full irrigation)
+    - R_F (rainfed) always 0
+  - For each Corpus treatment, the RL policy is applied to the corresponding plot’s data for the 2025 season.
 
-### 2.3 Proximal Policy Optimization (PPO) Configuration
+### 2.5 Scaling and Calibration
 
-#### 2.3.1 Network Architecture
+To ensure agronomic realism and comparability, RL recommendations are scaled using three factors:
+- **Plot size ratio:** Corpus (443.5 sq ft) / Lubbock (6475 sq ft)
+- **Treatment ratio:** Corpus protocol / Lubbock protocol (e.g., 0.5/0.65 for H_I)
+- **Climate factor:** Ratio of Corpus to Lubbock ET₀ (default 0.8)
+- **Total scaling:** Product of the above
 
-**Policy Network Structure**:
-```
-π_θ: R^8 → R^7 (for F_I/H_I) or R^1 (for R_F)
+After RL inference, all recommendations are further scaled so that the total seasonal irrigation matches field-applied targets:
+- F_I: 10.51 inches/season (2,900 gallons)
+- H_I: 9.76 inches/season (2,690 gallons)
 
-Network Architecture:
-Input Layer: 8 features (state vector)
-Hidden Layer 1: 128 neurons + Tanh activation
-Hidden Layer 2: 128 neurons + Tanh activation  
-Hidden Layer 3: 64 neurons + Tanh activation
-Output Layer: |A| neurons + Softmax (action probabilities)
-```
+### 2.6 Output and Reproducibility
 
-**Value Function Network** (shared architecture):
-```
-V_φ: R^8 → R
-
-Same architecture as policy network, single output value
-```
-
-#### 2.3.2 PPO Hyperparameters (Production Configuration)
-
-**Learning Parameters**:
-```
-learning_rate = 2e-4      # Reduced for stable convergence
-n_steps = 4096           # Steps per policy update
-batch_size = 128         # Mini-batch size for optimization
-n_epochs = 10            # Optimization epochs per update
-total_timesteps = 50000  # Total training duration
-```
-
-**PPO-Specific Parameters**:
-```
-gamma = 0.99             # Discount factor for future rewards
-gae_lambda = 0.95        # Generalized Advantage Estimation
-clip_range = 0.2         # PPO clipping parameter
-ent_coef = 0.1           # Entropy coefficient (increased to promote more exploration and action diversity)
-vf_coef = 0.5           # Value function loss coefficient
-max_grad_norm = 0.5      # Gradient clipping threshold
-```
-
-**Stability Enhancements**:
-```
-activation_fn = torch.nn.Tanh    # Stable activation function
-device = 'auto'                  # Automatic GPU/CPU selection
-verbose = 1                      # Training progress monitoring
-```
-
-### 2.4 Training Data Composition
-
-#### 2.4.1 Real Corpus Christi Data
-
-**Historical Coverage**: April 3 - October 31, 2025 (211 days)
-**Sample Distribution**:
-- R_F: Plot 102 observations
-- H_I: Plot 404 observations  
-- F_I: Plot 409 observations
-
-**Data Quality Assessment**:
-- ExG NaN values: 68 instances (handled via imputation)
-- Soil moisture range: 180-320 gallons
-- ET₀ range: 3.5-7.5 mm/day
-- Heat index range: 75-96°F
-
-#### 2.4.2 Synthetic Training Enhancement
-
-**Synthetic Data Generation**: 122 additional samples (June 1 - September 30)
-
-**Cotton Growth Modeling**:
-```
-ExG_synthetic(DAP) = {
-    0.2 + (DAP/45) × 0.4     if DAP < 45 (early growth)
-    0.6 - (DAP-45)/50 × 0.1  if 45 ≤ DAP < 95 (peak growth)
-    max(0.25, 0.5 - (DAP-95)/30 × 0.25)  if DAP ≥ 95 (senescence)
-}
-```
-
-**Environmental Simulation**:
-```
-SM_base = 200 + N(0, 10²)     # Normal soil moisture variation
-ET₀ = 4 + N(0, 1.5²)          # Reference ET variation  
-HI = 85 + N(0, 8²)            # Heat index variation
-R = Exponential(1) with p=0.3  # Rainfall probability distribution
-```
-
-#### 2.4.3 Combined Training Dataset
-
-**Total Training Samples**: 
-- Real Corpus Christi: 211 observations
-- Synthetic enhancement: 122 observations
-- Combined total: 333 training samples
-
-**Quality Assurance**:
-- 100% NaN handling coverage
-- Physiologically realistic ranges enforced
-- Treatment-specific patterns preserved
-
-### 2.5 Policy Application Framework
-
-#### 2.5.1 Irrigation Recommendation Pipeline
-
-**State Construction**:
-```python
-def construct_state(row):
-    features = [
-        row.get('Total Soil Moisture', 200),
-        row.get('ET0 (mm)', 5),
-        row.get('Heat Index (F)', 85),
-        row.get('Rainfall (gallons)', 0),
-        row.get('ExG', 0.4),
-        row.get('Days_After_Planting', 60),
-        max(0, 200 - row.get('Total Soil Moisture', 200)),
-        row.get('Kc (Crop Coefficient)', 0.8)
-    ]
-    
-    # NaN handling
-    for i, val in enumerate(features):
-        if pd.isna(val):
-            features[i] = default_values[i]
-    
-    return scaler.transform([features])[0]
-```
-
-**Policy Inference**:
-```python
-def get_irrigation_recommendation(model, state, treatment_type):
-    normalized_state = np.nan_to_num(state, nan=0.5)
-    action, _ = model.predict(normalized_state, deterministic=True)
-    return irrigation_amounts[treatment_type][action]
-```
-
-#### 2.5.2 Delta ExG Prediction Model
-
-**Seasonal Trend Component**:
-```
-base_trend(DAP) = {
-    +0.001  if DAP ≤ 80 (early season growth)
-    -0.001  if 80 < DAP ≤ 100 (mid-season decline)
-    -0.002  if DAP > 100 (late season senescence)
-}
-```
-
-**Irrigation Benefit Component**:
-```
-irrigation_benefit(I_t, SM_t) = {
-    0.01 + I_t/2000     if SM_t < 190 (high stress benefit)
-    0.005 + I_t/3000    if 190 ≤ SM_t < 200 (medium stress benefit)
-    max(-0.002, I_t/5000)  if SM_t ≥ 200 (low stress/potential waste)
-    0                   if I_t = 0 (no irrigation)
-}
-```
-
-**Combined Delta ExG Prediction**:
-```
-ΔExG_predicted = base_trend(DAP) + irrigation_benefit(I_t, SM_t)
-
-Subject to: -0.01 ≤ ΔExG_predicted ≤ 0.05
-```
+- All outputs are saved to the `outputs/` directory using robust, script-relative paths.
+- The main output is `lubbock_to_corpus_transfer_results_DIEG_FIEG_scaled.csv`, containing daily, scaled irrigation recommendations for each treatment.
+- The workflow is fully reproducible and documented, with all code and data sources versioned in the repository.
 
 ## 3. Results and Performance Analysis
 
@@ -525,14 +383,17 @@ The demonstrated success of reinforcement learning in agricultural irrigation ma
 Reinforcement Learning Retroactive Recommendations/
 ├── requirements.txt                     # Python dependencies
 ├── README.md                            # This documentation
+├── scripts/
+│   └── lubbock_to_corpus_transfer.py    # Main RL transfer and scaling script
 ├── src/
-│   └── irrigation_policy_transfer.py    # Main RL training and application
+│   └── irrigation_policy_transfer.py    # (DEPRECATED, see scripts/)
 ├── models/
 │   └── ppo/
 │       ├── plant_health_ppo_H_I_50k.zip # Trained H_I policy
 │       └── plant_health_ppo_F_I_50k.zip # Trained F_I policy
 ├── outputs/
-│   └── policy_transfer_recommendations_50k_final.csv
+│   ├── lubbock_to_corpus_transfer_results_DIEG_FIEG_scaled.csv # Main RL transfer output
+│   └── policy_transfer_recommendations_50k_final.csv           # (Legacy output)
 └── tests/
     └── test_reward_fixes.py             # Validation scripts
 ```
@@ -584,16 +445,13 @@ See `requirements.txt` for complete dependency list. Key packages:
 
 ### 7.4 Execution Instructions
 
-**Training new models** (50k timesteps, ~45-60 minutes):
+**Run RL policy transfer and scaling:**
 ```bash
-cd src
-python irrigation_policy_transfer.py
+cd scripts
+python lubbock_to_corpus_transfer.py
 ```
 
-**Quick validation** (if models already exist):
-```bash
-cd tests
-python test_reward_fixes.py
-```
+**Output location:**
+- outputs/lubbock_to_corpus_transfer_results_DIEG_FIEG_scaled.csv (main output)
 
-**Output location**: `outputs/policy_transfer_recommendations_50k_final.csv` 
+**Note:** All output paths are now robust and constructed relative to the script location, so you can run the script from any directory. 

@@ -39,11 +39,12 @@ class EnhancedMLCottonSyntheticGenerator:
         self.scaler_heat = StandardScaler()
         self.scaler_et0 = StandardScaler()
         self.scaler_rainfall = StandardScaler()
+        self.default_days = 212  # April 3 to October 31
         
     def load_data(self):
         """Load both Corpus and Lubbock data for enhanced training and seasonal patterns"""
         logger.info("Loading Corpus historical data (will be preserved 100%)...")
-        self.historical_data = pd.read_csv('../data/Model Input - Corpus.csv')
+        self.historical_data = pd.read_csv('../data/combined_weather_dataset.csv')
         self.historical_data['Date'] = pd.to_datetime(self.historical_data['Date'])
         
         logger.info("Loading Lubbock data for seasonal patterns and ML training...")
@@ -171,29 +172,23 @@ class EnhancedMLCottonSyntheticGenerator:
                 X_rainfall, y_rainfall, weights_rainfall)
     
     def _prepare_exg_features(self, data, is_corpus=True):
-        """Enhanced ExG features with location context"""
+        """Simplified ExG features to prevent overfitting"""
         features = []
         planting_date = self.COTTON_PLANTING_DATE if is_corpus else datetime(2023, 5, 1)  # Lubbock planting
         
         for _, row in data.iterrows():
             days_after_planting = (row['Date'] - planting_date).days
             
+            # Basic features only - no complex interactions
             feature_row = [
-                days_after_planting,
-                row.get('Heat Index (F)', 85.0),
-                row.get('ET0 (mm)', 8.0),
-                row.get('Total Soil Moisture', 200.0),
-                row.get('Rainfall (gallons)', 0.0),
-                1 if row.get('Treatment Type') in ['R_F', 'DICT'] else 0,  # Rainfed
-                1 if row.get('Treatment Type') in ['H_I', 'DIEG'] else 0,   # Partial irrigation  
-                1 if row.get('Treatment Type') == 'F_I' else 0,              # Full irrigation
-                self.get_texas_amu_cotton_kc(days_after_planting),
-                row['Date'].month,
-                row['Date'].timetuple().tm_yday,
-                1 if is_corpus else 0,  # Location indicator
-                # Enhanced seasonal features
-                np.sin(2 * np.pi * row['Date'].timetuple().tm_yday / 365),
-                np.cos(2 * np.pi * row['Date'].timetuple().tm_yday / 365),
+                days_after_planting,                    # Days since planting
+                row.get('Heat Index (F)', 85.0),        # Current heat index
+                row.get('ET0 (mm)', 8.0),               # Current ET0
+                row.get('Total Soil Moisture', 200.0),  # Current soil moisture
+                row.get('Rainfall (gallons)', 0.0),     # Current rainfall
+                row['Date'].month,                      # Month (1-12)
+                row['Date'].timetuple().tm_yday,        # Day of year (1-365)
+                1 if is_corpus else 0,                  # Location indicator
             ]
             
             features.append(feature_row)
@@ -201,36 +196,30 @@ class EnhancedMLCottonSyntheticGenerator:
         return np.array(features)
     
     def _prepare_soil_features(self, data, is_corpus=True):
-        """Enhanced soil features with location context"""
+        """Simplified soil features to prevent overfitting"""
         features = []
         planting_date = self.COTTON_PLANTING_DATE if is_corpus else datetime(2023, 5, 1)
         
         for _, row in data.iterrows():
             days_after_planting = (row['Date'] - planting_date).days
             
+            # Basic features only
             feature_row = [
-                days_after_planting,
-                row.get('Heat Index (F)', 85.0),
-                row.get('ET0 (mm)', 6.0),
-                row.get('Rainfall (gallons)', 0.0),
-                row.get('Irrigation Added (gallons)', 0.0),
-                1 if row.get('Treatment Type') in ['R_F', 'DICT'] else 0,
-                1 if row.get('Treatment Type') in ['H_I', 'DIEG'] else 0,
-                1 if row.get('Treatment Type') == 'F_I' else 0,
-                self.get_texas_amu_cotton_kc(days_after_planting),
-                row['Date'].month,
-                row['Date'].timetuple().tm_yday,
-                1 if is_corpus else 0,  # Location indicator
-                # Enhanced seasonal features
-                np.sin(2 * np.pi * row['Date'].timetuple().tm_yday / 365),
-                np.cos(2 * np.pi * row['Date'].timetuple().tm_yday / 365),
+                days_after_planting,                    # Days since planting
+                row.get('Heat Index (F)', 85.0),        # Current heat index
+                row.get('ET0 (mm)', 6.0),               # Current ET0
+                row.get('Rainfall (gallons)', 0.0),     # Current rainfall
+                row.get('Irrigation Added (gallons)', 0.0), # Current irrigation
+                row['Date'].month,                      # Month (1-12)
+                row['Date'].timetuple().tm_yday,        # Day of year (1-365)
+                1 if is_corpus else 0,                  # Location indicator
             ]
             features.append(feature_row)
         
         return np.array(features)
     
     def _prepare_environmental_features(self, data, is_corpus=True):
-        """Enhanced environmental features with more variation sources"""
+        """Simplified environmental features to prevent overfitting"""
         features = []
         planting_date = self.COTTON_PLANTING_DATE if is_corpus else datetime(2023, 5, 1)
         
@@ -238,92 +227,161 @@ class EnhancedMLCottonSyntheticGenerator:
             days_after_planting = (row['Date'] - planting_date).days
             day_of_year = row['Date'].timetuple().tm_yday
             
-            # Enhanced features for better variation
+            # Basic features only - no complex seasonal patterns
             feature_row = [
-                days_after_planting,
-                row['Date'].month,
-                day_of_year,
-                row['Date'].weekday(),
-                # Multiple seasonal patterns
-                np.sin(2 * np.pi * day_of_year / 365),
-                np.cos(2 * np.pi * day_of_year / 365),
-                np.sin(4 * np.pi * day_of_year / 365),  # Semi-annual pattern
-                np.cos(4 * np.pi * day_of_year / 365),
-                # Cotton growth stage context
-                self.get_texas_amu_cotton_kc(days_after_planting),
-                1 if is_corpus else 0,  # Location indicator
-                # Weather pattern indicators
-                (day_of_year - 182) ** 2 / 10000,  # Distance from summer peak
-                1 if 152 <= day_of_year <= 244 else 0,  # Summer months (Jun-Aug)
+                days_after_planting,                    # Days since planting
+                row['Date'].month,                      # Month (1-12)
+                day_of_year,                            # Day of year (1-365)
+                1 if is_corpus else 0,                  # Location indicator
             ]
             features.append(feature_row)
         
         return np.array(features)
 
+    def time_series_cross_validation(self, X, y, n_splits=3):
+        """
+        Perform time series cross-validation to prevent data leakage.
+        """
+        from sklearn.model_selection import TimeSeriesSplit
+        from sklearn.metrics import r2_score, mean_squared_error
+        
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+        cv_scores = []
+        cv_rmse = []
+        
+        for train_idx, test_idx in tscv.split(X):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+            
+            # Use simpler model for validation
+            from sklearn.ensemble import RandomForestRegressor
+            model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
+            
+            # Train model
+            model.fit(X_train, y_train)
+            
+            # Predict
+            y_pred = model.predict(X_test)
+            
+            # Calculate metrics
+            r2 = r2_score(y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            
+            cv_scores.append(r2)
+            cv_rmse.append(rmse)
+        
+        return np.array(cv_scores), np.array(cv_rmse)
+
     def train_enhanced_models(self, X_exg, y_exg, weights_exg, X_soil, y_soil, weights_soil,
                              X_heat, y_heat, weights_heat, X_et0, y_et0, weights_et0,
                              X_rainfall, y_rainfall, weights_rainfall):
-        """Train enhanced ML models with Lubbock weightings"""
-        logger.info("Training enhanced ML models with Lubbock data integration...")
+        """Train simplified ML models with proper time series validation"""
+        logger.info("Training simplified ML models with time series validation...")
         
-        MIN_SAMPLES = 5
+        MIN_SAMPLES = 10  # Increased minimum samples
         
-        # 1. Enhanced ExG model
+        # 1. Simplified ExG model
         if len(X_exg) >= MIN_SAMPLES:
+            # Time series cross-validation
+            cv_scores, cv_rmse = self.time_series_cross_validation(X_exg, y_exg, n_splits=3)
+            logger.info(f"ExG Time Series CV - R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            logger.info(f"ExG Time Series CV - RMSE: {cv_rmse.mean():.3f} ± {cv_rmse.std():.3f}")
+            
+            # Train final model with simpler parameters
             X_exg_scaled = self.scaler_exg.fit_transform(X_exg)
-            self.exg_model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
+            self.exg_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
             self.exg_model.fit(X_exg_scaled, y_exg, sample_weight=weights_exg)
             
             y_pred = self.exg_model.predict(X_exg_scaled)
             r2_exg = r2_score(y_exg, y_pred, sample_weight=weights_exg)
             rmse_exg = np.sqrt(mean_squared_error(y_exg, y_pred, sample_weight=weights_exg))
-            logger.info(f"Enhanced ExG Model - R²: {r2_exg:.3f}, RMSE: {rmse_exg:.3f}")
+            logger.info(f"Simplified ExG Model - R²: {r2_exg:.3f}, RMSE: {rmse_exg:.3f}")
         
-        # 2. Enhanced Soil model
+        # 2. Simplified Soil model
         if len(X_soil) >= MIN_SAMPLES:
+            cv_scores, cv_rmse = self.time_series_cross_validation(X_soil, y_soil, n_splits=3)
+            logger.info(f"Soil Time Series CV - R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            logger.info(f"Soil Time Series CV - RMSE: {cv_rmse.mean():.3f} ± {cv_rmse.std():.3f}")
+            
             X_soil_scaled = self.scaler_soil.fit_transform(X_soil)
-            self.soil_model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
+            self.soil_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
             self.soil_model.fit(X_soil_scaled, y_soil, sample_weight=weights_soil)
             
             y_pred = self.soil_model.predict(X_soil_scaled)
             r2_soil = r2_score(y_soil, y_pred, sample_weight=weights_soil)
             rmse_soil = np.sqrt(mean_squared_error(y_soil, y_pred, sample_weight=weights_soil))
-            logger.info(f"Enhanced Soil Model - R²: {r2_soil:.3f}, RMSE: {rmse_soil:.3f}")
+            logger.info(f"Simplified Soil Model - R²: {r2_soil:.3f}, RMSE: {rmse_soil:.3f}")
         
-        # 3. Enhanced Heat Index model with better parameters
+        # 3. Simplified Heat Index model
         if len(X_heat) >= MIN_SAMPLES:
+            cv_scores, cv_rmse = self.time_series_cross_validation(X_heat, y_heat, n_splits=3)
+            logger.info(f"Heat Index Time Series CV - R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            logger.info(f"Heat Index Time Series CV - RMSE: {cv_rmse.mean():.3f} ± {cv_rmse.std():.3f}")
+            
             X_heat_scaled = self.scaler_heat.fit_transform(X_heat)
-            # More trees and less regularization for better variation
-            self.heat_index_model = RandomForestRegressor(n_estimators=150, max_depth=10, 
-                                                         min_samples_split=2, min_samples_leaf=1, random_state=42)
+            self.heat_index_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
             self.heat_index_model.fit(X_heat_scaled, y_heat, sample_weight=weights_heat)
             
             y_pred = self.heat_index_model.predict(X_heat_scaled)
             r2_heat = r2_score(y_heat, y_pred, sample_weight=weights_heat)
             rmse_heat = np.sqrt(mean_squared_error(y_heat, y_pred, sample_weight=weights_heat))
-            logger.info(f"Enhanced Heat Index Model - R²: {r2_heat:.3f}, RMSE: {rmse_heat:.3f}")
+            logger.info(f"Simplified Heat Index Model - R²: {r2_heat:.3f}, RMSE: {rmse_heat:.3f}")
         
-        # 4. Enhanced ET0 model
+        # 4. Simplified ET0 model
         if len(X_et0) >= MIN_SAMPLES:
+            cv_scores, cv_rmse = self.time_series_cross_validation(X_et0, y_et0, n_splits=3)
+            logger.info(f"ET0 Time Series CV - R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            logger.info(f"ET0 Time Series CV - RMSE: {cv_rmse.mean():.3f} ± {cv_rmse.std():.3f}")
+            
             X_et0_scaled = self.scaler_et0.fit_transform(X_et0)
-            self.et0_model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
+            self.et0_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
             self.et0_model.fit(X_et0_scaled, y_et0, sample_weight=weights_et0)
             
             y_pred = self.et0_model.predict(X_et0_scaled)
             r2_et0 = r2_score(y_et0, y_pred, sample_weight=weights_et0)
             rmse_et0 = np.sqrt(mean_squared_error(y_et0, y_pred, sample_weight=weights_et0))
-            logger.info(f"Enhanced ET0 Model - R²: {r2_et0:.3f}, RMSE: {rmse_et0:.3f}")
+            logger.info(f"Simplified ET0 Model - R²: {r2_et0:.3f}, RMSE: {rmse_et0:.3f}")
         
-        # 5. Enhanced Rainfall model
+        # 5. Simplified Rainfall model
         if len(X_rainfall) >= MIN_SAMPLES:
+            cv_scores, cv_rmse = self.time_series_cross_validation(X_rainfall, y_rainfall, n_splits=3)
+            logger.info(f"Rainfall Time Series CV - R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            logger.info(f"Rainfall Time Series CV - RMSE: {cv_rmse.mean():.3f} ± {cv_rmse.std():.3f}")
+            
             X_rainfall_scaled = self.scaler_rainfall.fit_transform(X_rainfall)
-            self.rainfall_model = RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42)
+            self.rainfall_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
             self.rainfall_model.fit(X_rainfall_scaled, y_rainfall, sample_weight=weights_rainfall)
             
             y_pred = self.rainfall_model.predict(X_rainfall_scaled)
             r2_rainfall = r2_score(y_rainfall, y_pred, sample_weight=weights_rainfall)
             rmse_rainfall = np.sqrt(mean_squared_error(y_rainfall, y_pred, sample_weight=weights_rainfall))
-            logger.info(f"Enhanced Rainfall Model - R²: {r2_rainfall:.3f}, RMSE: {rmse_rainfall:.3f}")
+            logger.info(f"Simplified Rainfall Model - R²: {r2_rainfall:.3f}, RMSE: {rmse_rainfall:.3f}")
+        
+        logger.info("All simplified ML models trained successfully!")
+        
+        # Save models for RL system use
+        self.save_models_for_rl()
+    
+    def save_models_for_rl(self):
+        """Save trained models for use by the RL system"""
+        import joblib
+        import os
+        
+        # Create output directory
+        os.makedirs('../data/', exist_ok=True)
+        
+        # Save models and scalers
+        joblib.dump(self.rainfall_model, '../data/rainfall_model.pkl')
+        joblib.dump(self.scaler_rainfall, '../data/rainfall_scaler.pkl')
+        
+        joblib.dump(self.et0_model, '../data/et0_model.pkl')
+        joblib.dump(self.scaler_et0, '../data/et0_scaler.pkl')
+        
+        joblib.dump(self.heat_index_model, '../data/heat_index_model.pkl')
+        joblib.dump(self.scaler_heat, '../data/heat_index_scaler.pkl')
+        
+        logger.info("✅ ML models saved for RL system use!")
+        logger.info("RL system will now use ML-based weather generation")
 
     def get_texas_amu_cotton_kc(self, days_after_planting: int) -> float:
         """Get Texas A&M cotton Kc values"""
@@ -457,149 +515,163 @@ class EnhancedMLCottonSyntheticGenerator:
             else:
                 # Fallback to 0 (no rain)
                 return 0.0
+
+    def _generate_stochastic_rainfall(self, date: datetime, last_rainfall: float = 0.0) -> float:
+        """Generate stochastic rainfall with realistic weather patterns for Corpus Christi"""
+        day_of_year = date.timetuple().tm_yday
+        month = date.month
+        
+        # Corpus Christi rainfall climatology (gallons per day for 443.5 sq ft plot)
+        # Based on NOAA data: ~32 inches annual, with summer peak
+        
+        # Seasonal rainfall probability (chance of rain on any given day)
+        if month in [6, 7, 8, 9]:  # Summer/early fall - thunderstorm season
+            base_rain_prob = 0.25  # 25% chance
+            seasonal_multiplier = 1.3
+        elif month in [4, 5, 10]:  # Spring/late fall
+            base_rain_prob = 0.20  # 20% chance  
+            seasonal_multiplier = 1.0
+        elif month in [11, 12, 1, 2]:  # Winter - dry season
+            base_rain_prob = 0.10  # 10% chance
+            seasonal_multiplier = 0.6
+        else:  # March
+            base_rain_prob = 0.15  # 15% chance
+            seasonal_multiplier = 0.8
+        
+        # Weather persistence: if it rained yesterday, higher chance today
+        persistence_factor = 1.0
+        if last_rainfall > 0:
+            persistence_factor = 1.5  # 50% more likely
+        elif last_rainfall == 0:
+            persistence_factor = 0.9  # Slightly less likely after dry day
+            
+        # Final rain probability
+        rain_prob = base_rain_prob * persistence_factor
+        rain_prob = np.clip(rain_prob, 0.05, 0.6)  # Reasonable bounds
+        
+        # Determine if it rains
+        if np.random.random() > rain_prob:
+            return 0.0  # No rain
+        
+        # If it rains, determine amount using realistic distribution
+        # Corpus Christi rainfall: mostly light (0.1-0.5"), occasional heavy (1-3"), rare extreme (4"+)
+        
+        rain_type = np.random.random()
+        if rain_type < 0.6:  # 60% light rain
+            # Light rain: 0.1-0.5 inches = 10-50 gallons for plot
+            rainfall_inches = np.random.uniform(0.1, 0.5)
+        elif rain_type < 0.85:  # 25% moderate rain  
+            # Moderate rain: 0.5-1.5 inches = 50-150 gallons
+            rainfall_inches = np.random.uniform(0.5, 1.5)
+        elif rain_type < 0.95:  # 10% heavy rain
+            # Heavy rain: 1.5-3.0 inches = 150-300 gallons
+            rainfall_inches = np.random.uniform(1.5, 3.0)
+        else:  # 5% extreme rain
+            # Extreme rain: 3.0-6.0 inches = 300-600 gallons
+            rainfall_inches = np.random.uniform(3.0, 6.0)
+        
+        # Convert inches to gallons for 443.5 sq ft plot
+        # 1 inch over 443.5 sq ft = 443.5/144 = 3.08 sq ft = 0.277 cubic feet = 2.07 gallons per inch
+        rainfall_gallons = rainfall_inches * 2.07 * seasonal_multiplier
+        
+        # Add some random variation (weather is noisy)
+        rainfall_gallons *= np.random.uniform(0.8, 1.2)
+        
+        return max(0.0, rainfall_gallons)
+
+    def generate_realistic_rainfall(self, date: datetime) -> float:
+        """Wrapper for backward compatibility"""
+        return self._generate_stochastic_rainfall(date)
     
     def generate_synthetic_season(self, days_to_generate: int = None):
-        """Generate synthetic data using Lubbock seasonal patterns as templates"""
-        logger.info(f"Generating synthetic data using Lubbock seasonal patterns...")
+        """Generate synthetic season using simplified ML models"""
+        if days_to_generate is None:
+            days_to_generate = self.default_days
         
-        # Get Lubbock environmental patterns by day of year for reference
-        lubbock_patterns = self._get_lubbock_seasonal_patterns()
+        logger.info(f"Generating {days_to_generate} days of synthetic data...")
         
-        synthetic_rows = []
-        last_date = self.historical_data['Date'].max()
+        start_date = self.COTTON_PLANTING_DATE
+        synthetic_data = []
+        last_soil_moisture = 200.0  # Initial soil moisture
         
-        # Calculate how many days to generate based on Lubbock data availability
-        # Only generate data for dates where we have Lubbock reference patterns
-        corpus_start_date = last_date + timedelta(days=1)
-        
-        # Map Corpus date to corresponding Lubbock season (adjust year)
-        lubbock_reference_start = self.lubbock_start.replace(year=corpus_start_date.year)
-        lubbock_reference_end = self.lubbock_end.replace(year=corpus_start_date.year)
-        
-        # Find appropriate end date
-        if corpus_start_date <= lubbock_reference_end:
-            generation_end_date = lubbock_reference_end
-        else:
-            # If we're past Lubbock season, generate until end of year or specified days
-            if days_to_generate:
-                generation_end_date = corpus_start_date + timedelta(days=days_to_generate-1)
-            else:
-                generation_end_date = datetime(corpus_start_date.year, 12, 31)
-        
-        total_days = (generation_end_date - corpus_start_date).days + 1
-        logger.info(f"Generating {total_days} days: {corpus_start_date.strftime('%Y-%m-%d')} to {generation_end_date.strftime('%Y-%m-%d')}")
-        logger.info(f"Using Lubbock patterns from: {lubbock_reference_start.strftime('%Y-%m-%d')} to {lubbock_reference_end.strftime('%Y-%m-%d')}")
-        
-        # Get last values for continuity
-        last_values = {}
-        for plot_id in [102, 404, 409]:
-            plot_data = self.historical_data[self.historical_data['Plot ID'] == plot_id]
+        for day in range(days_to_generate):
+            current_date = start_date + timedelta(days=day)
+            days_after_planting = day + 1
             
-            # Find last valid ExG value for this plot
-            valid_exg_rows = plot_data.dropna(subset=['ExG'])
-            if len(valid_exg_rows) > 0:
-                last_exg = valid_exg_rows.iloc[-1]['ExG']
-            else:
-                last_exg = 0.3  # Default starting value
+            # Prepare features for ML prediction
+            env_features = self._prepare_env_prediction_features(current_date, days_after_planting)
             
-            # Find last valid soil moisture
-            valid_soil_rows = plot_data.dropna(subset=['Total Soil Moisture'])
-            if len(valid_soil_rows) > 0:
-                last_soil = valid_soil_rows.iloc[-1]['Total Soil Moisture']
+            # Generate weather variables using ML models
+            rainfall = self._predict_rainfall(env_features, current_date)
+            et0 = self._predict_et0(env_features)
+            heat_index = self._predict_heat_index(env_features, current_date)
+            
+            # Generate ExG using ML model
+            if self.exg_model is not None:
+                exg_features = np.array([[
+                    days_after_planting,
+                    heat_index,
+                    et0,
+                    last_soil_moisture,
+                    rainfall,
+                    current_date.month,
+                    current_date.timetuple().tm_yday,
+                    1  # Corpus location
+                ]])
+                exg_features_scaled = self.scaler_exg.transform(exg_features)
+                exg = self.exg_model.predict(exg_features_scaled)[0]
+                exg = self.apply_cotton_guardrails(exg, days_after_planting)
             else:
-                last_soil = 200.0  # Default starting value
+                exg = 0.5  # Default value
+            
+            # Generate soil moisture using ML model
+            if self.soil_model is not None:
+                soil_features = np.array([[
+                    days_after_planting,
+                    heat_index,
+                    et0,
+                    rainfall,
+                    0.0,  # No irrigation in synthetic data
+                    current_date.month,
+                    current_date.timetuple().tm_yday,
+                    1  # Corpus location
+                ]])
+                soil_features_scaled = self.scaler_soil.transform(soil_features)
+                predicted_soil = self.soil_model.predict(soil_features_scaled)[0]
                 
-            last_values[plot_id] = {
-                'exg': last_exg,
-                'soil': last_soil
+                # Apply water balance physics
+                soil_moisture = self._apply_water_balance(last_soil_moisture, predicted_soil, rainfall, et0, 0.8)
+                last_soil_moisture = soil_moisture
+            else:
+                soil_moisture = last_soil_moisture
+                last_soil_moisture = soil_moisture
+            
+            # Calculate Kc based on growth stage
+            kc = self.get_texas_amu_cotton_kc(days_after_planting)
+            
+            # Create synthetic data point
+            synthetic_point = {
+                'Date': current_date.strftime('%Y-%m-%d'),
+                'Plot ID': 'Synthetic',
+                'Treatment Type': 'Synthetic',
+                'ExG': exg,
+                'Total Soil Moisture': soil_moisture,
+                'Irrigation Added (gallons)': 0.0,
+                'Rainfall (gallons)': rainfall,
+                'ET0 (mm)': et0,
+                'Heat Index (F)': heat_index,
+                'Kc (Crop Coefficient)': kc
             }
             
-        logger.info(f"Starting ExG values: Plot 102={last_values[102]['exg']:.3f}, Plot 404={last_values[404]['exg']:.3f}, Plot 409={last_values[409]['exg']:.3f}")
+            synthetic_data.append(synthetic_point)
         
-        for day in range(total_days):
-            synthetic_date = corpus_start_date + timedelta(days=day)
-            days_after_planting = (synthetic_date - self.COTTON_PLANTING_DATE).days
-            
-            # Use Lubbock seasonal patterns for environmental variables
-            rainfall = self._get_rainfall_from_lubbock_pattern(synthetic_date, lubbock_patterns)
-            heat_index = self._get_heat_index_from_lubbock_pattern(synthetic_date, lubbock_patterns)
-            
-            # ET0 still use ML if available, otherwise generate
-            env_features = self._prepare_env_prediction_features(synthetic_date, days_after_planting)
-            et0 = self._predict_et0(env_features) if self.et0_model else self._generate_et0(synthetic_date)
-            
-            for plot_id in [102, 404, 409]:
-                treatment_type = {102: 'R_F', 404: 'H_I', 409: 'F_I'}[plot_id]
-                
-                # Predict ExG using enhanced ML + guardrails
-                if self.exg_model is not None:
-                    features = np.array([[
-                        days_after_planting, heat_index, et0, last_values[plot_id]['soil'], rainfall,
-                        1 if treatment_type == 'R_F' else 0,
-                        1 if treatment_type == 'H_I' else 0,
-                        1 if treatment_type == 'F_I' else 0,
-                        self.get_texas_amu_cotton_kc(days_after_planting),
-                        synthetic_date.month, synthetic_date.timetuple().tm_yday,
-                        1,  # Corpus location indicator
-                        # Enhanced seasonal features
-                        np.sin(2 * np.pi * synthetic_date.timetuple().tm_yday / 365),
-                        np.cos(2 * np.pi * synthetic_date.timetuple().tm_yday / 365),
-                    ]])
-                    
-                    features_scaled = self.scaler_exg.transform(features)
-                    predicted_exg = self.exg_model.predict(features_scaled)[0]
-                    final_exg = self.apply_cotton_guardrails(predicted_exg, days_after_planting)
-                    # Temporal smoothing
-                    final_exg = 0.7 * final_exg + 0.3 * last_values[plot_id]['exg']
-                else:
-                    final_exg = 0.3
-                    logger.warning("ExG model is None! Using default value 0.3")
-                
-                # Predict soil moisture with enhanced features
-                if self.soil_model is not None:
-                    soil_features = np.array([[
-                        days_after_planting, heat_index, et0, rainfall, 0.0,
-                        1 if treatment_type == 'R_F' else 0,
-                        1 if treatment_type == 'H_I' else 0,
-                        1 if treatment_type == 'F_I' else 0,
-                        self.get_texas_amu_cotton_kc(days_after_planting),
-                        synthetic_date.month, synthetic_date.timetuple().tm_yday,
-                        1,  # Corpus location indicator
-                        # Enhanced seasonal features
-                        np.sin(2 * np.pi * synthetic_date.timetuple().tm_yday / 365),
-                        np.cos(2 * np.pi * synthetic_date.timetuple().tm_yday / 365),
-                    ]])
-                    
-                    soil_features_scaled = self.scaler_soil.transform(soil_features)
-                    predicted_soil = self.soil_model.predict(soil_features_scaled)[0]
-                    final_soil = self._apply_water_balance(last_values[plot_id]['soil'], predicted_soil, rainfall, et0, self.get_texas_amu_cotton_kc(days_after_planting))
-                else:
-                    final_soil = 200.0
-                
-                # Calculate irrigation
-                irrigation = self._calculate_irrigation(final_soil, treatment_type)
-                final_soil += irrigation * 0.554
-                
-                synthetic_row = {
-                    'Date': synthetic_date,
-                    'Plot ID': plot_id,
-                    'Treatment Type': treatment_type,
-                    'ExG': final_exg,
-                    'Total Soil Moisture': final_soil,
-                    'Irrigation Added (gallons)': irrigation,
-                    'Rainfall (gallons)': rainfall,
-                    'ET0 (mm)': et0,
-                    'Heat Index (F)': heat_index,
-                    'Kc (Crop Coefficient)': self.get_texas_amu_cotton_kc(days_after_planting)
-                }
-                
-                synthetic_rows.append(synthetic_row)
-                
-                # Update last values for next day
-                last_values[plot_id]['exg'] = final_exg
-                last_values[plot_id]['soil'] = final_soil
+        # Convert to DataFrame
+        synthetic_df = pd.DataFrame(synthetic_data)
         
-        return pd.DataFrame(synthetic_rows)
+        logger.info(f"Generated {len(synthetic_df)} synthetic data points")
+        logger.info(f"Rainfall summary: {synthetic_df['Rainfall (gallons)'].describe()}")
+        
+        return synthetic_df
     
     def _generate_et0(self, date: datetime) -> float:
         """Generate realistic ET0 for Corpus Christi based on TexasET Network data"""
@@ -653,7 +725,7 @@ class EnhancedMLCottonSyntheticGenerator:
             return min(50.0, (175 - soil_moisture) * 0.8)
         return 0.0
     
-    def save_complete_season(self, output_filename: str = '../data/corpus_season_completed_enhanced_lubbock_ml.csv'):
+    def save_complete_season(self, output_filename: str = 'data/corpus_season_completed_enhanced_lubbock_ml.csv'):
         """Save complete season - PRESERVES historical data 100%"""
         logger.info("Generating complete season - PRESERVING historical data 100%...")
         
@@ -665,7 +737,7 @@ class EnhancedMLCottonSyntheticGenerator:
         complete_season = complete_season.sort_values(['Date', 'Plot ID'])
         
         # Save to CSV
-        complete_season.to_csv(output_filename, index=False)
+        complete_season.to_csv('../data/corpus_season_completed_enhanced_lubbock_ml.csv', index=False)
         logger.info(f"Complete season saved to {output_filename}")
         
         # Verify historical data preservation
@@ -685,25 +757,15 @@ class EnhancedMLCottonSyntheticGenerator:
         logger.info(f"Generation completed: {historical_rows} historical + {len(synthetic_df)} synthetic = {len(complete_season)} total rows")
     
     def _prepare_env_prediction_features(self, date: datetime, days_after_planting: int) -> np.ndarray:
-        """Enhanced features for environmental variable prediction - matches training features"""
+        """Simplified features for environmental variable prediction - matches simplified training features"""
         day_of_year = date.timetuple().tm_yday
         
+        # Basic features only - matches simplified training
         feature_row = [
-            days_after_planting,
-            date.month,
-            day_of_year,
-            date.weekday(),
-            # Multiple seasonal patterns
-            np.sin(2 * np.pi * day_of_year / 365),
-            np.cos(2 * np.pi * day_of_year / 365),
-            np.sin(4 * np.pi * day_of_year / 365),  # Semi-annual pattern
-            np.cos(4 * np.pi * day_of_year / 365),
-            # Cotton growth stage context
-            self.get_texas_amu_cotton_kc(days_after_planting),
-            1,  # Corpus location indicator
-            # Weather pattern indicators
-            (day_of_year - 182) ** 2 / 10000,  # Distance from summer peak
-            1 if 152 <= day_of_year <= 244 else 0,  # Summer months (Jun-Aug)
+            days_after_planting,                    # Days since planting
+            date.month,                             # Month (1-12)
+            day_of_year,                            # Day of year (1-365)
+            1,                                      # Corpus location indicator
         ]
         return np.array([feature_row])
     

@@ -65,7 +65,7 @@ class AccuracyAnalyzer:
         
         # Load complete synthetic dataset 
         self.complete_data = pd.read_csv('../data/corpus_season_completed_enhanced_lubbock_ml.csv')
-        self.complete_data['Date'] = pd.to_datetime(self.complete_data['Date'])
+        self.complete_data['Date'] = pd.to_datetime(self.complete_data['Date'], format='mixed')
         
         # Separate synthetic from historical
         historical_dates = set(self.historical_data['Date'].dt.date)
@@ -411,7 +411,7 @@ class AccuracyAnalyzer:
         
         plt.tight_layout()
         plt.savefig('../analysis/model_performance_analysis.png', dpi=300, bbox_inches='tight')
-        print("Model performance plot saved: ../analysis/model_performance_analysis.png")
+        print("Model performance plot saved: analysis/model_performance_analysis.png")
         
         # 3. Distribution comparisons
         if len(self.historical_data) > 0 and len(self.synthetic_data) > 0:
@@ -723,6 +723,74 @@ class AccuracyAnalyzer:
             'seasonal_results': seasonal_results,
             'agricultural_results': agricultural_results
         }
+
+    def time_series_cross_validation(self, model, X, y, n_splits=5):
+        """
+        Perform time series cross-validation to avoid data leakage.
+        """
+        from sklearn.model_selection import TimeSeriesSplit
+        
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+        cv_scores = []
+        
+        for train_idx, test_idx in tscv.split(X):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+            
+            # Train model
+            model.fit(X_train, y_train)
+            
+            # Predict
+            y_pred = model.predict(X_test)
+            
+            # Calculate R²
+            from sklearn.metrics import r2_score
+            r2 = r2_score(y_test, y_pred)
+            cv_scores.append(r2)
+        
+        return np.array(cv_scores)
+
+    def realistic_rainfall_validation(self):
+        """
+        Perform realistic rainfall validation with proper time series handling.
+        """
+        print("\n🌧️ REALISTIC RAINFALL VALIDATION")
+        print("=" * 50)
+        
+        # Get rainfall data
+        rainfall_data = self.historical_data.dropna(subset=['Rainfall (gallons)'])
+        
+        if len(rainfall_data) < 20:
+            print("⚠️  Insufficient rainfall data for validation")
+            return
+        
+        # Prepare features (simplified to avoid overfitting)
+        features = ['Day_of_Year', 'Month', 'Is_Corpus']
+        X = rainfall_data[features].values
+        y = rainfall_data['Rainfall (gallons)'].values
+        
+        # Time series cross-validation
+        from sklearn.ensemble import RandomForestRegressor
+        model = RandomForestRegressor(n_estimators=50, random_state=42)
+        
+        cv_scores = self.time_series_cross_validation(model, X, y, n_splits=3)
+        
+        print(f"Time Series CV R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+        print(f"Individual CV scores: {cv_scores}")
+        
+        # Compare to literature
+        print(f"\n📚 LITERATURE COMPARISON:")
+        print(f"   Our CV R²: {cv_scores.mean():.3f}")
+        print(f"   Literature range: 0.7-0.9 (agricultural meteorology)")
+        print(f"   Assessment: {'✅ Realistic' if 0.7 <= cv_scores.mean() <= 0.9 else '⚠️  Suspicious'}")
+        
+        # Distributional validation
+        print(f"\n📊 DISTRIBUTIONAL VALIDATION:")
+        print(f"   Historical rainfall events: {(rainfall_data['Rainfall (gallons)'] > 0).sum()}/{len(rainfall_data)}")
+        print(f"   Historical mean: {rainfall_data['Rainfall (gallons)'].mean():.1f} gallons")
+        print(f"   Historical std: {rainfall_data['Rainfall (gallons)'].std():.1f} gallons")
+        
+        return cv_scores
 
 def main():
     """Run the complete accuracy analysis"""
