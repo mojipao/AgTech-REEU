@@ -1,0 +1,16 @@
+2025-07-06 21:13:51,553 - INFO - Starting synthetic data generation
+2025-07-06 21:13:51,553 - INFO - Loading Corpus historical data (will be preserved 100%)...
+2025-07-06 21:13:51,572 - INFO - Loading weather data for Heat Index prediction...
+2025-07-06 21:13:52,722 - INFO - Loaded weather data from 27 files
+2025-07-06 21:13:52,723 - INFO - Weather data covers: 1998-01-01 00:30:00 to 2024-12-31 23:30:00
+2025-07-06 21:13:52,723 - INFO - Loading Lubbock data for seasonal patterns and ML training...
+2025-07-06 21:13:52,726 - INFO - Corpus data: 11233 rows - WILL NOT BE MODIFIED
+2025-07-06 21:13:52,726 - INFO - Weather data: 236688 rows - FOR HEAT INDEX PREDICTION
+2025-07-06 21:13:52,726 - INFO - Lubbock data: 1288 rows - FOR ENHANCED ML TRAINING
+2025-07-06 21:13:52,726 - INFO - Lubbock covers: 2023-05-01 to 2023-10-31
+2025-07-06 21:13:52,726 - INFO - Preparing enhanced ML training data with Lubbock weightings...
+2025-07-06 21:13:52,735 - INFO - ExG training: 155 Corpus + 140 Lubbock = 295 samples
+2025-07-06 21:13:52,758 - INFO - Soil training: 465 Corpus + 388 Lubbock = 853 samples
+2025-07-06 21:13:52,774 - INFO - Heat Index training: 50000 PRE-2023 weather samples (NO LEAKAGE)
+2025-07-06 21:13:57,257 - INFO - ET0 weather training: 10000 PRE-2023 samples (NO LEAKAGE)
+2025-07-06 21:13:57,273 - INFO - ET0 training: 10000 weather + 440 Corpus + 366 Lubbock = 10806 samples

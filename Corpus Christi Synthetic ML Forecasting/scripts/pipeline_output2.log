@@ -1,0 +1,55 @@
+2025-07-06 14:56:50,321 - INFO - Starting synthetic data generation
+2025-07-06 14:56:50,321 - INFO - Loading Corpus historical data (will be preserved 100%)...
+2025-07-06 14:56:50,336 - INFO - Loading weather data for Heat Index prediction...
+2025-07-06 14:56:51,555 - INFO - Loaded weather data from 27 files
+2025-07-06 14:56:51,556 - INFO - Weather data covers: 1998-01-01 00:30:00 to 2024-12-31 23:30:00
+2025-07-06 14:56:51,557 - INFO - Loading Lubbock data for seasonal patterns and ML training...
+2025-07-06 14:56:51,561 - INFO - Corpus data: 11233 rows - WILL NOT BE MODIFIED
+2025-07-06 14:56:51,561 - INFO - Weather data: 236688 rows - FOR HEAT INDEX PREDICTION
+2025-07-06 14:56:51,561 - INFO - Lubbock data: 1288 rows - FOR ENHANCED ML TRAINING
+2025-07-06 14:56:51,561 - INFO - Lubbock covers: 2023-05-01 to 2023-10-31
+2025-07-06 14:56:51,561 - INFO - Preparing enhanced ML training data with Lubbock weightings...
+2025-07-06 14:56:51,570 - INFO - ExG training: 155 Corpus + 140 Lubbock = 295 samples
+2025-07-06 14:56:51,592 - INFO - Soil training: 465 Corpus + 388 Lubbock = 853 samples
+2025-07-06 14:56:51,596 - INFO - Heat Index training: 236688 weather samples using actual weather variables
+2025-07-06 14:56:58,383 - INFO - ET0 training: 23669 weather + 440 Corpus + 366 Lubbock = 24475 samples
+2025-07-06 20:46:14,538 - INFO - Rainfall training: 23669 weather + 1362 Corpus + 1288 Lubbock = 26319 samples
+2025-07-06 20:46:14,541 - INFO - Training ultra-conservative ML models with strong regularization...
+2025-07-06 20:46:14,657 - INFO - ExG Time Series CV - R²: -2.184 ± 4.171
+2025-07-06 20:46:14,657 - INFO - ExG Time Series CV - RMSE: 0.142 ± 0.140
+2025-07-06 20:46:14,675 - INFO - ExG: Using Random Forest (R²: 0.515) over Ridge (R²: 0.466)
+2025-07-06 20:46:14,676 - INFO - Ultra-conservative ExG Model - R²: 0.515, RMSE: 0.106
+2025-07-06 20:46:14,790 - INFO - Soil Time Series CV - R²: -0.111 ± 0.402
+2025-07-06 20:46:14,790 - INFO - Soil Time Series CV - RMSE: 11.616 ± 4.386
+2025-07-06 20:46:14,802 - INFO - Soil: Using Random Forest (R²: 0.485) over Ridge (R²: 0.333)
+2025-07-06 20:46:14,803 - INFO - Ultra-conservative Soil Model - R²: 0.485, RMSE: 9.758
+2025-07-06 20:46:29,064 - INFO - Heat Index Time Series CV - R²: 0.989 ± 0.003
+2025-07-06 20:46:29,064 - INFO - Heat Index Time Series CV - RMSE: 1.550 ± 0.291
+2025-07-06 20:46:30,195 - INFO - Heat Index: Using Ridge Regression (R²: 0.957) over RF (R²: 0.864)
+2025-07-06 20:46:30,210 - INFO - Ultra-conservative Heat Index Model - R²: 0.957, RMSE: 3.143
+2025-07-06 20:46:31,990 - INFO - ET0 Time Series CV - R²: 0.850 ± 0.218
+2025-07-06 20:46:31,990 - INFO - ET0 Time Series CV - RMSE: 1.045 ± 0.750
+2025-07-06 20:46:32,641 - INFO - ET0 Model - R²: 0.930, RMSE: 0.886
+2025-07-06 20:46:34,423 - INFO - Rainfall Time Series CV - R²: 0.047 ± 0.055
+2025-07-06 20:46:34,424 - INFO - Rainfall Time Series CV - RMSE: 336.567 ± 517.958
+2025-07-06 20:46:35,101 - INFO - Rainfall Model - R²: 0.281, RMSE: 351.164
+2025-07-06 20:46:35,101 - INFO - All ultra-conservative ML models trained successfully!
+2025-07-06 20:46:35,120 - INFO - ✅ ML models saved for RL system use!
+2025-07-06 20:46:35,120 - INFO - RL system will now use ML-based weather generation
+2025-07-06 20:46:35,120 - INFO - Generating complete season - PRESERVING historical data 100%...
+2025-07-06 20:46:35,120 - INFO - Generating 212 days of synthetic data...
+2025-07-06 20:46:37,124 - INFO - Generated 212 synthetic data points
+2025-07-06 20:46:37,127 - INFO - Rainfall summary: count    2.120000e+02
+mean     1.586627e+01
+std      3.561122e-15
+min      1.586627e+01
+25%      1.586627e+01
+50%      1.586627e+01
+75%      1.586627e+01
+max      1.586627e+01
+Name: Rainfall (gallons), dtype: float64
+2025-07-06 20:46:37,227 - INFO - Complete season saved to data/corpus_season_completed_enhanced_lubbock_ml.csv
+2025-07-06 20:46:37,227 - INFO - Historical data preservation verified: 11233 rows UNCHANGED
+2025-07-06 20:46:37,227 - INFO - Synthetic data added: 212 new rows
+2025-07-06 20:46:37,227 - INFO - Generation completed: 11233 historical + 212 synthetic = 11445 total rows
+2025-07-06 20:46:37,228 - INFO - Synthetic data generation completed

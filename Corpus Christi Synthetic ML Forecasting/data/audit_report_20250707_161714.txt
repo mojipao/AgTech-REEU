@@ -1,0 +1,181 @@
+=== DATA PRESERVATION AUDIT REPORT ===
+Generated: 2025-07-07 16:17:14
+
+HISTORICAL DATA PRESERVATION CHECK:
+  Historical rows: 11233
+  Preserved rows: 11233
+  WARNING: 316 values changed in column 'Temperature_C'
+    Row 9251: '23.579166666666666' -> 'nan'
+    Row 9258: 'nan' -> '23.579166666666666'
+    Row 9264: '23.72083333333333' -> 'nan'
+    Row 9266: 'nan' -> '23.72083333333333'
+    Row 9273: '23.9875' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Relative_Humidity'
+    Row 9251: '81.2525' -> 'nan'
+    Row 9258: 'nan' -> '81.2525'
+    Row 9264: '85.27333333333333' -> 'nan'
+    Row 9266: 'nan' -> '85.27333333333333'
+    Row 9273: '81.50458333333334' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Solar_Radiation_MJ'
+    Row 9251: '662.256' -> 'nan'
+    Row 9258: 'nan' -> '662.256'
+    Row 9264: '455.76' -> 'nan'
+    Row 9266: 'nan' -> '455.76'
+    Row 9273: '632.4480000000001' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Wind_Speed_ms'
+    Row 9251: '3.804166666666667' -> 'nan'
+    Row 9258: 'nan' -> '3.804166666666667'
+    Row 9264: '3.2916666666666665' -> 'nan'
+    Row 9266: 'nan' -> '3.2916666666666665'
+    Row 9273: '2.6166666666666667' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'ET0_mm'
+    Row 9251: '111.93725231924728' -> 'nan'
+    Row 9258: 'nan' -> '111.93725231924728'
+    Row 9264: '80.13126906255647' -> 'nan'
+    Row 9266: 'nan' -> '80.13126906255647'
+    Row 9273: '117.1590956400371' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Heat_Index_F'
+    Row 9251: '74.4425' -> 'nan'
+    Row 9258: 'nan' -> '74.4425'
+    Row 9264: '74.69749999999999' -> 'nan'
+    Row 9266: 'nan' -> '74.69749999999999'
+    Row 9273: '75.17750000000001' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Month'
+    Row 9251: '5.0' -> 'nan'
+    Row 9258: 'nan' -> '5.0'
+    Row 9264: '5.0' -> 'nan'
+    Row 9266: 'nan' -> '5.0'
+    Row 9273: '5.0' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Day_of_Year'
+    Row 9251: '121.0' -> 'nan'
+    Row 9258: 'nan' -> '121.0'
+    Row 9264: '122.0' -> 'nan'
+    Row 9266: 'nan' -> '122.0'
+    Row 9273: '123.0' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Year'
+    Row 9251: '2023.0' -> 'nan'
+    Row 9258: 'nan' -> '2023.0'
+    Row 9264: '2023.0' -> 'nan'
+    Row 9266: 'nan' -> '2023.0'
+    Row 9273: '2023.0' -> 'nan'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Source'
+    Row 9251: 'Weather_Station' -> 'Lubbock'
+    Row 9258: 'Lubbock' -> 'Weather_Station'
+    Row 9264: 'Weather_Station' -> 'Lubbock'
+    Row 9266: 'Lubbock' -> 'Weather_Station'
+    Row 9273: 'Weather_Station' -> 'Lubbock'
+    ... and 311 more changes
+  WARNING: 316 values changed in column 'Location'
+    Row 9251: 'Corpus_Christi' -> 'nan'
+    Row 9258: 'nan' -> 'Corpus_Christi'
+    Row 9264: 'Corpus_Christi' -> 'nan'
+    Row 9266: 'nan' -> 'Corpus_Christi'
+    Row 9273: 'Corpus_Christi' -> 'nan'
+    ... and 311 more changes
+  WARNING: 1325 values changed in column 'Plot ID'
+    Row 9251: 'nan' -> '27.0'
+    Row 9252: '27.0' -> '28.0'
+    Row 9253: '28.0' -> '29.0'
+    Row 9254: '49.0' -> '30.0'
+    Row 9255: '47.0' -> '46.0'
+    ... and 1320 more changes
+  WARNING: 1183 values changed in column 'Treatment Type'
+    Row 9251: 'nan' -> 'DICT'
+    Row 9252: 'DICT' -> 'DIEG'
+    Row 9253: 'DIEG' -> 'FICT'
+    Row 9254: 'FICT' -> 'FIEG'
+    Row 9255: 'FIEG' -> 'DIEG'
+    ... and 1178 more changes
+  WARNING: 215 values changed in column 'ExG'
+    Row 9331: 'nan' -> '-0.04421578'
+    Row 9332: '-0.045933838' -> '-0.043239869'
+    Row 9333: '-0.049081904' -> '-0.045856542'
+    Row 9334: '-0.048865542' -> '-0.045933838'
+    Row 9335: '-0.043239869' -> '-0.048865542'
+    ... and 210 more changes
+  WARNING: 473 values changed in column 'Total Soil Moisture'
+    Row 9299: '221.475' -> '226.2333333'
+    Row 9300: '231.0958333' -> 'nan'
+    Row 9302: 'nan' -> '221.475'
+    Row 9303: '226.2333333' -> '223.975'
+    Row 9305: 'nan' -> '231.0958333'
+    ... and 468 more changes
+  WARNING: 74 values changed in column 'Irrigation Added (gallons)'
+    Row 9664: 'nan' -> '0.0'
+    Row 9666: '0.0' -> 'nan'
+    Row 9699: '4330.0' -> '0.0'
+    Row 9700: '4000.0' -> '4010.0'
+    Row 9701: '0.0' -> '4100.0'
+    ... and 69 more changes
+  WARNING: 316 values changed in column 'Rainfall (gallons)'
+    Row 9251: 'nan' -> '0.0'
+    Row 9258: '0.0' -> 'nan'
+    Row 9264: 'nan' -> '906.336'
+    Row 9266: '906.336' -> 'nan'
+    Row 9273: 'nan' -> '5060.376'
+    ... and 311 more changes
+  WARNING: 239 values changed in column 'ET0 (mm)'
+    Row 9788: '6.534235849497845' -> 'nan'
+    Row 9791: 'nan' -> '6.534235849497845'
+    Row 9792: 'nan' -> '6.534235849497845'
+    Row 9794: '6.534235849497845' -> 'nan'
+    Row 9798: '3.702302983768859' -> '4.690571865945404'
+    ... and 234 more changes
+  WARNING: 237 values changed in column 'Heat Index (F)'
+    Row 9307: 'nan' -> '88.45906378'
+    Row 9308: '88.13285133' -> '88.74884473'
+    Row 9309: '88.74884473' -> '88.13285133'
+    Row 9311: 'nan' -> '88.45906378'
+    Row 9312: '88.45906378' -> 'nan'
+    ... and 232 more changes
+  WARNING: 21 values changed in column 'Kc (Crop Coefficient)'
+    Row 11150: '0.4648' -> 'nan'
+    Row 11151: 'nan' -> '0.4648'
+    Row 11158: '0.4651' -> '0.3801'
+    Row 11159: '0.3801' -> '0.4651'
+    Row 11161: '0.4651' -> '0.3801'
+    ... and 16 more changes
+  WARNING: 123 values changed in column 'Canopy Cover (CC)'
+    Row 9331: 'nan' -> '0.0'
+    Row 9338: '0.0' -> 'nan'
+    Row 9379: 'nan' -> '0.0'
+    Row 9386: '0.0' -> 'nan'
+    Row 9431: 'nan' -> '0.0'
+    ... and 118 more changes
+  WARNING: 123 values changed in column 'Kc (Crop Coeffecient)'
+    Row 9331: 'nan' -> '-0.148'
+    Row 9338: '-0.148' -> 'nan'
+    Row 9379: 'nan' -> '-0.148'
+    Row 9386: '-0.148' -> 'nan'
+    Row 9431: 'nan' -> '-0.148'
+    ... and 118 more changes
+
+MISSING VALUE FILLING AUDIT:
+  RL-relevant plots in 2025: 719 rows
+  ExG missing values: 0 -> 0
+  Soil moisture missing values: 0 -> 0
+
+SAMPLE FILLED VALUES:
+  Plot 102.0:
+    2025-06-04: ExG=0.30, Soil=362.5
+    2025-06-05: ExG=0.65, Soil=362.5
+    2025-06-06: ExG=0.59, Soil=238.5
+  Plot 404.0:
+    2025-06-04: ExG=0.44, Soil=362.5
+    2025-06-05: ExG=1.00, Soil=362.5
+    2025-06-07: ExG=0.92, Soil=209.4
+  Plot 409.0:
+    2025-06-04: ExG=0.39, Soil=362.5
+    2025-06-05: ExG=0.86, Soil=362.5
+    2025-06-06: ExG=0.69, Soil=189.9
+
+=== AUDIT COMPLETED ===
